@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>ProjektJA.App</RootNamespace>
+    <AssemblyName>ProjektJA.App</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <Target Name="CopyNativeLibraries" AfterTargets="Build">
+    <PropertyGroup>
+      <HighLevelDll>$(MSBuildProjectDirectory)\..\ProjektJA.HighLevel\bin\x64\$(Configuration)\ProjektJA.HighLevel.dll</HighLevelDll>
+      <AssemblyDll>$(MSBuildProjectDirectory)\..\ProjektJA.Assembly\bin\x64\$(Configuration)\ProjektJA.Assembly.dll</AssemblyDll>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(HighLevelDll)')" Text="Brak DLL C++. Zbuduj całą solucję ProjektJA.sln w konfiguracji x64." />
+    <Error Condition="!Exists('$(AssemblyDll)')" Text="Brak DLL ASM. Zbuduj całą solucję ProjektJA.sln w konfiguracji x64." />
+    <Copy SourceFiles="$(HighLevelDll);$(AssemblyDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>
