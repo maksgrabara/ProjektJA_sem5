@@ -51,6 +51,8 @@ internal sealed class MainForm : Form
     private readonly Button _runButton = new() { Text = "Uruchom algorytm", Width = 280, Height = 42, Enabled = false };
     /// <summary>Saves the processed output bitmap to disk.</summary>
     private readonly Button _saveButton = new() { Text = "Zapisz wynik", Width = 280, Height = 42, Enabled = false };
+    /// <summary>Runs automated multi-threaded benchmark for C++ and ASM and exports CSV.</summary>
+    private readonly Button _benchmarkButton = new() { Text = "Benchmark (CSV)", Width = 280, Height = 42, Enabled = false };
     /// <summary>Displays the loaded source image.</summary>
     private readonly PictureBox _sourcePreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
     /// <summary>Displays the filtered result after the kernel is implemented.</summary>
@@ -92,6 +94,7 @@ internal sealed class MainForm : Form
         _loadImageButton.Click += (_, _) => LoadImage();
         _runButton.Click += (_, _) => RunAlgorithm();
         _saveButton.Click += (_, _) => SaveImage();
+        _benchmarkButton.Click += (_, _) => RunBenchmark();
         _highLevelOption.CheckedChanged += (_, _) => UpdateSelectedBackend();
         _assemblyOption.CheckedChanged += (_, _) => UpdateSelectedBackend();
         _threadSlider.ValueChanged += (_, _) => SynchronizeThreadCount(_threadSlider.Value);
@@ -272,6 +275,14 @@ internal sealed class MainForm : Form
         _saveButton.ForeColor = MutedColor;
         _saveButton.Margin = new Padding(0, 8, 0, 0);
         flow.Controls.Add(_saveButton);
+
+        _benchmarkButton.FlatStyle = FlatStyle.Flat;
+        _benchmarkButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        _benchmarkButton.FlatAppearance.BorderSize = 1;
+        _benchmarkButton.BackColor = Color.FromArgb(226, 232, 240);
+        _benchmarkButton.ForeColor = MutedColor;
+        _benchmarkButton.Margin = new Padding(0, 8, 0, 0);
+        flow.Controls.Add(_benchmarkButton);
 
         return card;
     }
@@ -496,6 +507,13 @@ internal sealed class MainForm : Form
             _runButton.BackColor = AccentColor;
             _runButton.ForeColor = Color.White;
 
+            if (_highLevelBackend is not null && _assemblyBackend is not null)
+            {
+                _benchmarkButton.Enabled = true;
+                _benchmarkButton.BackColor = Color.White;
+                _benchmarkButton.ForeColor = InkColor;
+            }
+
             // Auto-reset prawego okna z wynikiem po wczytaniu nowego obrazu
             var previousResult = _resultPreview.Image;
             _resultPreview.Image = null;
@@ -651,5 +669,137 @@ internal sealed class MainForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
+    }
+
+    /// <summary>
+    /// Przeprowadza serię pomiarów (C++ vs ASM) dla różnych liczb wątków i zapisuje wyniki do pliku CSV.
+    /// </summary>
+    private async void RunBenchmark()
+    {
+        if (_inputBitmap is null || _highLevelBackend is null || _assemblyBackend is null) return;
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "Zapisz wyniki benchmarku do CSV",
+            Filter = "Plik CSV (*.csv)|*.csv",
+            DefaultExt = "csv",
+            FileName = $"benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}.csv"
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        int maxThreads = (int)_threadInput.Maximum; // Domyślnie 64
+        const int iterations = 10;      // 10 iteracji dla średniego czasu
+
+        // Zablokowanie przycisków na czas testu
+        _runButton.Enabled = false;
+        _loadImageButton.Enabled = false;
+        _benchmarkButton.Enabled = false;
+
+        using Bitmap normalizedInput = _inputBitmap.Clone(
+            new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
+            System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+        using Bitmap outputBitmap = new Bitmap(normalizedInput.Width, normalizedInput.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+        var rect = new Rectangle(0, 0, normalizedInput.Width, normalizedInput.Height);
+        var inData = normalizedInput.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, normalizedInput.PixelFormat);
+        var outData = outputBitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.WriteOnly, outputBitmap.PixelFormat);
+
+        var csvBuilder = new System.Text.StringBuilder();
+        csvBuilder.AppendLine("Liczba watkow;Sredni czas C++ [ms];Sredni czas ASM [ms];Przyspieszenie (C++/ASM)");
+
+        var plCulture = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
+
+        try
+        {
+            for (int threads = 1; threads <= maxThreads; threads++)
+            {
+                // Pomiar dla C++
+                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, maxThreads, iterations, "C++");
+                // Pomiar dla ASM
+                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, maxThreads, iterations, "ASM");
+
+                double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
+
+                csvBuilder.AppendLine(string.Format(plCulture, "{0};{1:F4};{2:F4};{3:F2}", threads, cppAvg, asmAvg, speedup));
+            }
+
+            File.WriteAllText(dialog.FileName, csvBuilder.ToString(), System.Text.Encoding.UTF8);
+            _timeNote.Text = "Benchmark zakończony pomyślnie (1–64 wątków). Zapisano plik CSV.";
+            MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków)!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Błąd podczas benchmarku:\n\n{ex.InnerException?.Message ?? ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            normalizedInput.UnlockBits(inData);
+            outputBitmap.UnlockBits(outData);
+
+            _runButton.Enabled = true;
+            _loadImageButton.Enabled = true;
+            _benchmarkButton.Enabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Pomocnicza metoda wykonująca rozgrzewkę oraz N pomiarów dla wybranego backendu i liczby wątków.
+    /// </summary>
+    private async Task<double> MeasureBackendAsync(
+        NativeBackend backend,
+        System.Drawing.Imaging.BitmapData inData,
+        System.Drawing.Imaging.BitmapData outData,
+        int threads,
+        int maxThreads,
+        int iterations,
+        string label)
+    {
+        _timeNote.Text = $"Benchmark ({label}): testowanie {threads}/{maxThreads} wątków ({iterations} prób)...";
+
+        int usableHeight = inData.Height - 2;
+        int rowsPerThread = usableHeight / threads;
+        int remainder = usableHeight % threads;
+
+        Task RunSinglePassAsync()
+        {
+            Task[] tasks = new Task[threads];
+            int currentY = 1;
+
+            for (int t = 0; t < threads; t++)
+            {
+                int startY = currentY;
+                int endY = startY + rowsPerThread + (t < remainder ? 1 : 0);
+                currentY = endY;
+
+                tasks[t] = Task.Run(() =>
+                {
+                    if (startY < endY)
+                    {
+                        int status = backend.Process(inData.Scan0, outData.Scan0, inData.Width, inData.Stride, startY, endY);
+                        if (status != 0) throw new Exception($"Kod błędu DLL: {status}");
+                    }
+                });
+            }
+            return Task.WhenAll(tasks);
+        }
+
+        // 1. Przebieg rozgrzewkowy (Warm-up)
+        await RunSinglePassAsync();
+
+        // 2. Właściwe pomiary
+        double totalMs = 0;
+        for (int i = 1; i <= iterations; i++)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await RunSinglePassAsync();
+            sw.Stop();
+            totalMs += sw.Elapsed.TotalMilliseconds;
+        }
+
+        double avgMs = totalMs / iterations;
+        _timeValue.Text = $"{avgMs:F2} ms";
+        return avgMs;
     }
 }
