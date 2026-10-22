@@ -1,4 +1,3 @@
-LIBRARY ProjektJA.HighLevel
 EXPORTS
     JA_GetBackendName
     JA_ProcessImage

@@ -19,7 +19,7 @@ internal sealed class NativeBackend : IDisposable
     private delegate nint GetBackendNameDelegate();
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate int ProcessImageDelegate(nint inBuffer, nint outBuffer, int width, int stride, int startY, int endY);
+    public delegate int ProcessImageDelegate(nint inBuffer, nint outBuffer, int width, int stride, int startY, int endY, int maskSize);
 
     /// <summary>Operating-system handle returned by NativeLibrary.Load.</summary>
     private readonly nint _libraryHandle;
@@ -68,14 +68,15 @@ internal sealed class NativeBackend : IDisposable
     /// Wywołuje funkcję przetwarzającą. Obecne biblioteki zwracają status „niezaimplementowano”.
     /// </summary>
     public int Process(
-            nint sourceBgr24,
-            nint destinationBgr24,
-            int width,
-            int strideBytes,
-            int startY,
-            int endY)
+        nint sourceBgr24,
+        nint destinationBgr24,
+        int width,
+        int strideBytes,
+        int startY,
+        int endY,
+        int maskSize)
     {
-        return _processImage(sourceBgr24, destinationBgr24, width, strideBytes, startY, endY);
+        return _processImage(sourceBgr24, destinationBgr24, width, strideBytes, startY, endY, maskSize);
     }
 
     /// <summary>

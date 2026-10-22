@@ -33,6 +33,8 @@ internal sealed class MainForm : Form
     private readonly TrackBar _threadSlider = new() { Minimum = 1, Maximum = 64, TickFrequency = 4, SmallChange = 1, LargeChange = 8, Height = 44 };
     /// <summary>Numeric thread-count input synchronized with the slider.</summary>
     private readonly NumericUpDown _threadInput = new() { Minimum = 1, Maximum = 64, Width = 96, TextAlign = HorizontalAlignment.Center };
+    /// <summary>Allows selecting Gaussian kernel size (3x3, 5x5, 7x7).</summary>
+    private readonly ComboBox _maskSizeCombo = new(){ DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
     /// <summary>Displays the detected logical processor count.</summary>
     private readonly Label _threadSummary = new() { AutoSize = true, ForeColor = MutedColor };
     /// <summary>Shows the active library name or a loading problem.</summary>
@@ -202,6 +204,12 @@ internal sealed class MainForm : Form
         backendChoice.Controls.Add(_assemblyOption);
         flow.Controls.Add(backendChoice);
         flow.Controls.Add(_selectedBackend);
+
+        flow.Controls.Add(SectionTitle("Rozmiar maski Gaussa"));
+        _maskSizeCombo.Items.AddRange(["3x3 (Szybka — promień 1 px)", "5x5 (Średnia — promień 2 px)", "7x7 (Głęboka — promień 3 px)"]);
+        _maskSizeCombo.SelectedIndex = 0;
+        _maskSizeCombo.Margin = new Padding(0, 6, 0, 4);
+        flow.Controls.Add(_maskSizeCombo);
 
         flow.Controls.Add(SectionTitle("Wątki robocze"));
         var processorCount = Math.Clamp(Environment.ProcessorCount, 1, 64);
@@ -551,26 +559,50 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Uruchamia wybraną bibliotekę DLL, przekazuje jej zablokowaną pamięć obrazu i mierzy czas.
+    /// Zwraca wybrany przez użytkownika rozmiar maski Gaussa (3, 5 lub 7).
+    /// </summary>
+    private int GetSelectedMaskSize() => _maskSizeCombo.SelectedIndex switch
+    {
+        1 => 5,
+        2 => 7,
+        _ => 3
+    };
+
+    /// <summary>
+    /// Uruchamia wybrany backend (C++ lub ASM) dla aktualnie wczytanego obrazu i wybranej maski.
     /// </summary>
     private async void RunAlgorithm()
     {
-        if (_inputBitmap == null) return;
-        var backend = _assemblyOption.Checked ? _assemblyBackend : _highLevelBackend;
-        if (backend == null) return;
+        if (_inputBitmap is null) return;
+
+        NativeBackend? selectedBackend = _highLevelOption.Checked ? _highLevelBackend : _assemblyBackend; if (selectedBackend is null)
+        {
+            MessageBox.Show(this, "Wybrana biblioteka DLL nie została poprawnie załadowana.", "Błąd backendu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        int maskSize = GetSelectedMaskSize();
+        int radius = maskSize / 2;
+
+        if (_inputBitmap.Width <= maskSize || _inputBitmap.Height <= maskSize)
+        {
+            MessageBox.Show(this, $"Obraz jest zbyt mały dla maski {maskSize}x{maskSize}.", "Zbyt mały obraz", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
 
         int threads = (int)_threadInput.Value;
+
+        // Zablokowanie kontrolek na czas przetwarzania w tle
+        _runButton.Enabled = false;
+        _loadImageButton.Enabled = false;
+        _benchmarkButton.Enabled = false;
+        _timeNote.Text = $"Przetwarzanie ({selectedBackend.Name}, maska {maskSize}x{maskSize})...";
 
         using Bitmap normalizedInput = _inputBitmap.Clone(
             new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
             System.Drawing.Imaging.PixelFormat.Format24bppRgb);
 
-        // Kopiujemy oryginalny obraz na wyjście, aby zachować brzegowe piksele, których maska 3x3 nie może dotknąć
         Bitmap outputBitmap = new Bitmap(normalizedInput.Width, normalizedInput.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-        using (var g = Graphics.FromImage(outputBitmap))
-        {
-            g.DrawImageUnscaled(normalizedInput, 0, 0);
-        }
 
         var rect = new Rectangle(0, 0, normalizedInput.Width, normalizedInput.Height);
         var inData = normalizedInput.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, normalizedInput.PixelFormat);
@@ -578,53 +610,82 @@ internal sealed class MainForm : Form
 
         try
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int width = inData.Width;
+            int height = inData.Height;
+            int stride = inData.Stride;
+            nint inScan0 = inData.Scan0;
+            nint outScan0 = outData.Scan0;
 
-            // Podział wysokości obrazu na poprawne paski przydzielane wątkom
-            int usableHeight = inData.Height - 2;
+            int usableHeight = height - 2 * radius;
             int rowsPerThread = usableHeight / threads;
             int remainder = usableHeight % threads;
 
             Task[] tasks = new Task[threads];
-            int currentY = 1;
+            int currentY = radius;
 
-            for (int i = 0; i < threads; i++)
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            for (int t = 0; t < threads; t++)
             {
                 int startY = currentY;
-                int endY = startY + rowsPerThread + (i < remainder ? 1 : 0);
+                int endY = startY + rowsPerThread + (t < remainder ? 1 : 0);
                 currentY = endY;
 
-                tasks[i] = Task.Run(() =>
+                tasks[t] = Task.Run(() =>
                 {
-                    // DLL otrzymuje teraz parametry: in, out, szerokość, stride, startY, endY
-                    int status = backend.Process(inData.Scan0, outData.Scan0, inData.Width, inData.Stride, startY, endY);
-                    if (status != 0) throw new Exception($"Zewnętrzny kod błędu: {status}");
+                    if (startY < endY)
+                    {
+                        int status = selectedBackend.Process(inScan0, outScan0, width, stride, startY, endY, maskSize);
+                        if (status != 0)
+                        {
+                            throw new Exception($"Biblioteka natywna zwróciła błąd (Kod: {status}).");
+                        }
+                    }
                 });
             }
 
-            await Task.WhenAll(tasks); // Płynna synchronizacja wykonania na rdzeniach
+            await Task.WhenAll(tasks);
             sw.Stop();
 
-            _timeValue.Text = $"{sw.Elapsed.TotalMilliseconds:F2} ms";
-            _timeNote.Text = $"Czas algorytmu dla rozdzielczości {inData.Width}x{inData.Height} ({threads} wątków).";
+            normalizedInput.UnlockBits(inData);
+            outputBitmap.UnlockBits(outData);
 
             var oldResult = _resultPreview.Image;
             _resultPreview.Image = outputBitmap;
             _resultPlaceholder.Visible = false;
             oldResult?.Dispose();
+
             _saveButton.Enabled = true;
             _saveButton.BackColor = Color.White;
             _saveButton.ForeColor = InkColor;
+
+            _timeValue.Text = $"{sw.Elapsed.TotalMilliseconds:F2} ms";
+            _timeNote.Text = $"Zakończono pomyślnie ({selectedBackend.Name}, {threads} wątków, maska {maskSize}x{maskSize}).";
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Błąd wykonania:\n\n{ex.InnerException?.Message ?? ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            normalizedInput.UnlockBits(inData);
+            outputBitmap.UnlockBits(outData);
             outputBitmap.Dispose();
+
+            _timeValue.Text = "Błąd";
+            _timeNote.Text = "Wystąpił wyjątek podczas przetwarzania obrazu.";
+
+            MessageBox.Show(
+                this,
+                $"Wystąpił błąd podczas przetwarzania:\n\n{ex.InnerException?.Message ?? ex.Message}",
+                "Błąd wykonania",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
         finally
         {
-            normalizedInput.UnlockBits(inData);
-            outputBitmap.UnlockBits(outData);
+            _runButton.Enabled = true;
+            _loadImageButton.Enabled = true;
+            if (_highLevelBackend is not null && _assemblyBackend is not null)
+            {
+                _benchmarkButton.Enabled = true;
+            }
         }
     }
 
@@ -672,26 +733,33 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Przeprowadza serię pomiarów (C++ vs ASM) dla różnych liczb wątków i zapisuje wyniki do pliku CSV.
+    /// Przeprowadza pełny benchmark (1..64 wątków, C++ vs ASM) dla wybranej maski i zapisuje wyniki do pliku CSV.
     /// </summary>
     private async void RunBenchmark()
     {
         if (_inputBitmap is null || _highLevelBackend is null || _assemblyBackend is null) return;
+
+        int maskSize = GetSelectedMaskSize();
+
+        if (_inputBitmap.Width <= maskSize || _inputBitmap.Height <= maskSize)
+        {
+            MessageBox.Show(this, $"Obraz jest zbyt mały dla maski {maskSize}x{maskSize}.", "Zbyt mały obraz", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
 
         using var dialog = new SaveFileDialog
         {
             Title = "Zapisz wyniki benchmarku do CSV",
             Filter = "Plik CSV (*.csv)|*.csv",
             DefaultExt = "csv",
-            FileName = $"benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}.csv"
+            FileName = $"benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}_maska{maskSize}x{maskSize}.csv"
         };
 
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
-        int maxThreads = (int)_threadInput.Maximum; // Domyślnie 64
-        const int iterations = 10;      // 10 iteracji dla średniego czasu
+        int maxThreads = (int)_threadInput.Maximum;
+        const int iterations = 10;
 
-        // Zablokowanie przycisków na czas testu
         _runButton.Enabled = false;
         _loadImageButton.Enabled = false;
         _benchmarkButton.Enabled = false;
@@ -715,10 +783,8 @@ internal sealed class MainForm : Form
         {
             for (int threads = 1; threads <= maxThreads; threads++)
             {
-                // Pomiar dla C++
-                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, maxThreads, iterations, "C++");
-                // Pomiar dla ASM
-                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, maxThreads, iterations, "ASM");
+                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, maxThreads, iterations, maskSize, "C++");
+                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, maxThreads, iterations, maskSize, "ASM");
 
                 double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
 
@@ -726,8 +792,8 @@ internal sealed class MainForm : Form
             }
 
             File.WriteAllText(dialog.FileName, csvBuilder.ToString(), System.Text.Encoding.UTF8);
-            _timeNote.Text = "Benchmark zakończony pomyślnie (1–64 wątków). Zapisano plik CSV.";
-            MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków)!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _timeNote.Text = $"Benchmark zakończony (1–{maxThreads} wątków, maska {maskSize}x{maskSize}). Zapisano CSV.";
+            MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków, maska {maskSize}x{maskSize})!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
@@ -745,7 +811,7 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Pomocnicza metoda wykonująca rozgrzewkę oraz N pomiarów dla wybranego backendu i liczby wątków.
+    /// Pomocnicza metoda wykonująca przebieg rozgrzewkowy oraz N pomiarów dla wybranego backendu, liczby wątków i rozmiaru maski.
     /// </summary>
     private async Task<double> MeasureBackendAsync(
         NativeBackend backend,
@@ -754,18 +820,20 @@ internal sealed class MainForm : Form
         int threads,
         int maxThreads,
         int iterations,
+        int maskSize,
         string label)
     {
-        _timeNote.Text = $"Benchmark ({label}): testowanie {threads}/{maxThreads} wątków ({iterations} prób)...";
+        _timeNote.Text = $"Benchmark ({label}, maska {maskSize}x{maskSize}): wątek {threads}/{maxThreads} ({iterations} prób)...";
 
-        int usableHeight = inData.Height - 2;
+        int radius = maskSize / 2;
+        int usableHeight = inData.Height - 2 * radius;
         int rowsPerThread = usableHeight / threads;
         int remainder = usableHeight % threads;
 
         Task RunSinglePassAsync()
         {
             Task[] tasks = new Task[threads];
-            int currentY = 1;
+            int currentY = radius;
 
             for (int t = 0; t < threads; t++)
             {
@@ -777,7 +845,7 @@ internal sealed class MainForm : Form
                 {
                     if (startY < endY)
                     {
-                        int status = backend.Process(inData.Scan0, outData.Scan0, inData.Width, inData.Stride, startY, endY);
+                        int status = backend.Process(inData.Scan0, outData.Scan0, inData.Width, inData.Stride, startY, endY, maskSize);
                         if (status != 0) throw new Exception($"Kod błędu DLL: {status}");
                     }
                 });
@@ -788,7 +856,7 @@ internal sealed class MainForm : Form
         // 1. Przebieg rozgrzewkowy (Warm-up)
         await RunSinglePassAsync();
 
-        // 2. Właściwe pomiary
+        // 2. Właściwe pomiary czasowe
         double totalMs = 0;
         for (int i = 1; i <= iterations; i++)
         {

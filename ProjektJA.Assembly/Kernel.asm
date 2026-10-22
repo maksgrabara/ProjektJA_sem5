@@ -1,11 +1,30 @@
-; Temat projektu: Filtr rozmycia Gaussa 3x3 dla obrazów w skali szaroœci
-; Opis: Biblioteka dynamiczna DLL x64 obliczaj¹ca splot Gaussa 3x3 z u¿yciem instrukcji SIMD (SSE4.1).
+; Temat projektu: Filtr rozmycia Gaussa (3x3, 5x5, 7x7) dla obrazów kolorowych RGB (BGR24)
+; Opis: Biblioteka dynamiczna DLL x64 obliczaj¹ca splot Gaussa z u¿yciem instrukcji SIMD (SSE4.1).
 ; Autor: Maksymilian Grabara
 ; Rok akademicki: 2026/2027
-; Wersja: 1.1.0 (Zoptymalizowane adresowanie, pojedyncza pêtla)
+; Wersja: 2.1.0 (Obs³uga masek 3x3, 5x5 oraz 7x7 na 32-bitowych wektorach XMM)
 
 .data
-BackendName db 'ASM x64 (Gauss 3x3 SIMD)', 0
+BackendName db 'ASM x64 SIMD (Gauss RGB 3x3/5x5/7x7)', 0
+
+align 16
+Mask3x3 dd  1,  2,  1
+        dd  2,  4,  2
+        dd  1,  2,  1
+
+Mask5x5 dd  1,  4,  6,  4,  1
+        dd  4, 16, 24, 16,  4
+        dd  6, 24, 36, 24,  6
+        dd  4, 16, 24, 16,  4
+        dd  1,  4,  6,  4,  1
+
+Mask7x7 dd  1,   6,  15,  20,  15,   6,  1
+        dd  6,  36,  90, 120,  90,  36,  6
+        dd 15,  90, 225, 300, 225,  90, 15
+        dd 20, 120, 300, 400, 300, 120, 20
+        dd 15,  90, 225, 300, 225,  90, 15
+        dd  6,  36,  90, 120,  90,  36,  6
+        dd  1,   6,  15,  20,  15,   6,  1
 
 .code
 
@@ -18,14 +37,15 @@ JA_GetBackendName PROC
 JA_GetBackendName ENDP
 
 ; ==========================================================
-; G³ówna funkcja matematyczna: splot Gaussa 3x3 w SIMD
+; G³ówna funkcja matematyczna: splot Gaussa 3x3 / 5x5 / 7x7 w SIMD
 ; Parametry (Windows x64 ABI):
 ;   RCX        - inBuffer (wskaŸnik na dane wejœciowe BGR24)
 ;   RDX        - outBuffer (wskaŸnik na dane wyjœciowe BGR24)
 ;   R8D        - width (szerokoœæ obrazu w pikselach)
 ;   R9D        - stride (szerokoœæ wiersza w bajtach)
-;   [RBP + 48] - startY (wiersz pocz¹tkowy)
-;   [RBP + 56] - endY (wiersz koñcowy)
+;   [RBP + 48] - startY (wiersz pocz¹tkowy dla w¹tku)
+;   [RBP + 56] - endY (wiersz koñcowy dla w¹tku)
+;   [RBP + 64] - maskSize (rozmiar maski: 3, 5 lub 7)
 ; ==========================================================
 JA_ProcessImage PROC
     push rbp
@@ -38,116 +58,145 @@ JA_ProcessImage PROC
     push r14
     push r15
 
-    mov r10d, DWORD PTR [rbp + 48]  ; r10d = startY
-    mov r11d, DWORD PTR [rbp + 56]  ; r11d = endY
+    mov r10, rcx                    ; R10 = inBuffer
+    mov r11, rdx                    ; R11 = outBuffer
+    movsxd rdi, r9d                 ; RDI = stride (64-bit)
 
-    cmp r8d, 3
-    jl ZakonczWatek
-    cmp r10d, r11d
+    mov eax, DWORD PTR [rbp + 48]   ; EAX = startY
+    cmp eax, DWORD PTR [rbp + 56]   ; Porównanie startY z endY
     jge ZakonczWatek
-    
-    movsxd rdi, r9d                 ; RDI = stride (sta³e dla ca³ego wywo³ania)
-    mov r12d, r10d                  ; R12D = aktualny wiersz (Y)
 
+    ; --- Wybór parametrów maski (3x3, 5x5 lub 7x7) ---
+    mov ecx, DWORD PTR [rbp + 64]   ; ECX = maskSize
+    cmp ecx, 5
+    je UstawMaske5x5
+    cmp ecx, 7
+    je UstawMaske7x7
+
+UstawMaske3x3:
+    mov ecx, 3                      ; maskSize = 3
+    mov ebx, 1                      ; radius = 1
+    mov edx, 4                      ; shift = 4 (dzielenie przez 16)
+    lea r9, Mask3x3                 ; R9 = adres tablicy wag 3x3
+    jmp KonfigurujPetle
+
+UstawMaske5x5:
+    mov ebx, 2                      ; radius = 2
+    mov edx, 8                      ; shift = 8 (dzielenie przez 256)
+    lea r9, Mask5x5                 ; R9 = adres tablicy wag 5x5
+    jmp KonfigurujPetle
+
+UstawMaske7x7:
+    mov ebx, 3                      ; radius = 3
+    mov edx, 12                     ; shift = 12 (dzielenie przez 4096)
+    lea r9, Mask7x7                 ; R9 = adres tablicy wag 7x7
+
+KonfigurujPetle:
+    cmp r8d, ecx                    ; Sprawdzenie czy width > maskSize
+    jle ZakonczWatek
+
+    movd xmm3, edx                  ; XMM3 = wartoœæ przesuniêcia bitowego (4, 8 lub 12)
+
+    ; Zapisujemy sta³e pomocnicze w Shadow Space [RBP + 16 .. RBP + 40]
     mov eax, r8d
-    dec eax                         ; EAX = width - 1 (prawa granica pêtli kolumn)
+    sub eax, ebx                    ; EAX = width - radius (koniec pêtli X)
+    mov DWORD PTR [rbp + 16], eax   ; [RBP + 16] = endX
+    mov DWORD PTR [rbp + 20], ebx   ; [RBP + 20] = radius (start pêtli X)
+
+    ; Wyliczenie topLeftOffset = -(radius * stride + radius * 3)
+    movsxd rax, ebx
+    imul rax, rdi                   ; RAX = radius * stride
+    movsxd rdx, ebx
+    lea rdx, [rdx + rdx*2]          ; RDX = radius * 3
+    add rax, rdx
+    neg rax
+    mov QWORD PTR [rbp + 24], rax   ; [RBP + 24] = topLeftOffset
+
+    ; Wyliczenie rowStep = stride - maskSize * 3 (przeskok do kolejnego wiersza maski)
+    movsxd rdx, ecx
+    lea rdx, [rdx + rdx*2]          ; RDX = maskSize * 3
+    mov rax, rdi
+    sub rax, rdx
+    mov QWORD PTR [rbp + 32], rax   ; [RBP + 32] = rowStep
+
+    mov r8d, ecx                    ; R8D = maskSize (sta³e w pêtlach)
+    mov r12d, DWORD PTR [rbp + 48]  ; R12D = aktualny wiersz Y = startY
 
 PrzetwarzajWiersze:
-    cmp r12d, r11d
+    cmp r12d, DWORD PTR [rbp + 56]
     jge ZakonczWatek
 
-    ; Offset pocz¹tku wiersza: RSI = Y * stride + 3 (start od kolumny X = 1)
+    mov r13d, DWORD PTR [rbp + 20]  ; R13D = X = radius
+
+    ; Offset pierwszego przetwarzanego piksela w wierszu: RSI = Y * stride + radius * 3
     movsxd rsi, r12d
     imul rsi, rdi
-    add rsi, 3
-
-    mov r13d, 1                     ; R13D = aktualna kolumna (X = 1)
+    movsxd rax, r13d
+    lea rax, [rax + rax*2]
+    add rsi, rax
 
 PrzetwarzajKolumny:
-    cmp r13d, eax
+    cmp r13d, DWORD PTR [rbp + 16]  ; Porównanie X z endX (width - radius)
     jge IterujKolejnyWiersz
 
-    mov rbx, rcx
-    add rbx, rsi                    ; RBX = adres piksela œrodkowego (X, Y)
-    
-    mov r14, rbx
-    sub r14, rdi                    ; R14 = adres piksela górnego (X, Y - 1)
-    
-    mov r15, rbx
-    add r15, rdi                    ; R15 = adres piksela dolnego (X, Y + 1)
+    pxor xmm0, xmm0                 ; Wyzerowanie akumulatora 32-bitowego [SumB, SumG, SumR, 0]
 
-    pxor xmm0, xmm0                 ; Wyzerowanie akumulatora wektorowego [0, 0, 0, ...]
+    mov r14, r10
+    add r14, rsi
+    add r14, QWORD PTR [rbp + 24]   ; R14 = wskaŸnik na lewy górny piksel otoczenia maski
+    mov r15, r9                     ; R15 = wskaŸnik na pocz¹tek tablicy wag maski
 
-    ; --- Rz¹d górny (Y - 1): wagi 1, 2, 1 ---
-    movd xmm1, dword ptr [r14 - 3]
-    pmovzxbw xmm1, xmm1
-    paddw xmm0, xmm1
+    mov ebx, r8d                    ; EBX = licznik wierszy maski (ky)
 
-    movd xmm1, dword ptr [r14]
-    pmovzxbw xmm1, xmm1
-    psllw xmm1, 1
-    paddw xmm0, xmm1
+PetlaMaskiY:
+    mov ecx, r8d                    ; ECX = licznik kolumn maski (kx)
 
-    movd xmm1, dword ptr [r14 + 3]
-    pmovzxbw xmm1, xmm1
-    paddw xmm0, xmm1
+PetlaMaskiX:
+    ; Bezpieczne pobranie 3 bajtów piksela [B, G, R] bez wychodzenia poza bufor
+    movzx eax, word ptr [r14]       ; Pobranie kana³ów B oraz G (2 bajty)
+    movzx edx, byte ptr [r14 + 2]   ; Pobranie kana³u R (1 bajt)
+    shl edx, 16
+    or eax, edx                     ; EAX = 0x00RRGGBB
+    movd xmm1, eax
+    pmovzxbd xmm1, xmm1             ; Rozszerzenie 8-bit -> 32-bit: XMM1 = [B, G, R, 0]
 
-    ; --- Rz¹d œrodkowy (Y): wagi 2, 4, 2 ---
-    movd xmm1, dword ptr [rbx - 3]
-    pmovzxbw xmm1, xmm1
-    psllw xmm1, 1                   
-    paddw xmm0, xmm1
+    movd xmm2, dword ptr [r15]      ; Pobranie wagi W z tablicy maski
+    pshufd xmm2, xmm2, 0            ; Powielenie wagi na 4 elementy: XMM2 = [W, W, W, W]
 
-    movd xmm1, dword ptr [rbx]
-    pmovzxbw xmm1, xmm1
-    psllw xmm1, 2
-    paddw xmm0, xmm1
+    pmulld xmm1, xmm2               ; Mno¿enie wektorowe 32-bit: XMM1 = [B*W, G*W, R*W, 0]
+    paddd xmm0, xmm1                ; Akumulacja w XMM0
 
-    movd xmm1, dword ptr [rbx + 3]
-    pmovzxbw xmm1, xmm1
-    psllw xmm1, 1                   
-    paddw xmm0, xmm1
+    add r14, 3                      ; Nastêpny piksel w wierszu maski (+3 bajty)
+    add r15, 4                      ; Nastêpna waga w tablicy (+4 bajty)
+    dec ecx
+    jnz PetlaMaskiX
 
-    ; --- Rz¹d dolny (Y + 1): wagi 1, 2, 1 ---
-    movd xmm1, dword ptr [r15 - 3]
-    pmovzxbw xmm1, xmm1
-    paddw xmm0, xmm1
+    add r14, QWORD PTR [rbp + 32]   ; Przeskok wskaŸnika obrazu do kolejnego wiersza maski
+    dec ebx
+    jnz PetlaMaskiY
 
-    movd xmm1, dword ptr [r15]
-    pmovzxbw xmm1, xmm1
-    psllw xmm1, 1                   
-    paddw xmm0, xmm1
+    ; --- Normalizacja i zapis piksela wynikowego ---
+    psrld xmm0, xmm3                ; Podzia³ przez sumê wag (>> 4, >> 8 lub >> 12)
+    packusdw xmm0, xmm0             ; Kompresja 32-bit -> 16-bit z nasyceniem
+    packuswb xmm0, xmm0             ; Kompresja 16-bit -> 8-bit z nasyceniem
+    movd eax, xmm0
 
-    ; [Bottom-Right] Bezpieczny odczyt 3 bajtów (chroni koniec bufora przed OOB)
-    movzx r14d, word ptr [r15 + 3]
-    movzx r15d, byte ptr [r15 + 5]
-    shl r15d, 16
-    or r14d, r15d
-    movd xmm1, r14d
-    pmovzxbw xmm1, xmm1
-    paddw xmm0, xmm1
+    mov rdx, r11
+    add rdx, rsi                    ; RDX = adres piksela w outBuffer
+    mov WORD PTR [rdx], ax          ; Zapis kana³ów B i G
+    shr eax, 16
+    mov BYTE PTR [rdx + 2], al      ; Zapis kana³u R
 
-    ; --- Normalizacja (/16) i zapis wyniku ---
-    psrlw xmm0, 4
-    packuswb xmm0, xmm0
-    movd r14d, xmm0
-    
-    mov r15, rdx
-    add r15, rsi
-    mov WORD PTR [r15], r14w        ; Zapis kana³ów B oraz G
-    shr r14d, 16
-    mov BYTE PTR [r15 + 2], r14b    ; Zapis kana³u R
-
-    add rsi, 3                      ; Kolejny piksel (+3 bajty)
-    inc r13d
+    add rsi, 3                      ; Przesuniêcie na kolejny piksel w wierszu (+3 bajty)
+    inc r13d                        ; X++
     jmp PrzetwarzajKolumny
 
 IterujKolejnyWiersz:
-    inc r12d                        
+    inc r12d                        ; Y++
     jmp PrzetwarzajWiersze
 
 ZakonczWatek:
-    xor eax, eax                    ; Kod powrotu 0 (JA_STATUS_OK)
+    xor eax, eax                    ; Zwrócenie kodu 0 (JA_STATUS_OK)
     pop r15
     pop r14
     pop r13
@@ -156,6 +205,6 @@ ZakonczWatek:
     pop rsi
     pop rbx
     pop rbp
-    ret                             
+    ret
 JA_ProcessImage ENDP
 END
