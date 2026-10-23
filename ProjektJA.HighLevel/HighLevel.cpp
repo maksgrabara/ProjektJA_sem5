@@ -35,7 +35,7 @@ extern "C"
 {
     const char* JA_GetBackendName() noexcept
     {
-        return "C++ HighLevel (Gauss RGB 3x3/5x5/7x7)";
+        return "C++ HighLevel";
     }
 
     int JA_ProcessImage(

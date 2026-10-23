@@ -1,88 +1,50 @@
-// Projekt: JA — przetwarzanie obrazu (temat do zatwierdzenia)
-// Algorytm: wspólny interfejs użytkownika; kernel zostanie podłączony później
-// Autor: [uzupełnić]
-// Data: 2026-10-10
-// Semestr/Rok akademicki: semestr 5 / 2026-2027
-// Wersja: 0.1.0 — szkielet GUI
-// Historia zmian: 0.1.0 — układ, wybór DLL, wątków i podgląd obrazu
-
 using System.Drawing;
 using System.Windows.Forms;
 
 namespace ProjektJA.App;
 
 /// <summary>
-/// Główne okno aplikacji z elementami wspólnymi dla obu proponowanych algorytmów.
+/// Główne okno aplikacji z elementami wspólnymi dla obu bibliotek.
 /// </summary>
 internal sealed class MainForm : Form
 {
-    /// <summary>Background color used for the resizable window surface.</summary>
     private static readonly Color PageColor = Color.FromArgb(244, 247, 251);
-    /// <summary>Primary text color used across the window.</summary>
     private static readonly Color InkColor = Color.FromArgb(30, 41, 59);
-    /// <summary>Secondary text color used for helper text and captions.</summary>
     private static readonly Color MutedColor = Color.FromArgb(100, 116, 139);
-    /// <summary>Accent color used to identify the selected backend.</summary>
     private static readonly Color AccentColor = Color.FromArgb(37, 99, 235);
 
-    /// <summary>Radio option for the C++ high-level library.</summary>
     private readonly RadioButton _highLevelOption = new() { Text = "C++ — język wysokiego poziomu", AutoSize = true };
-    /// <summary>Radio option for the x64 assembly library.</summary>
     private readonly RadioButton _assemblyOption = new() { Text = "ASM x64 — biblioteka asemblerowa", AutoSize = true };
-    /// <summary>Slider for choosing the worker-thread count.</summary>
     private readonly TrackBar _threadSlider = new() { Minimum = 1, Maximum = 64, TickFrequency = 4, SmallChange = 1, LargeChange = 8, Height = 44 };
-    /// <summary>Numeric thread-count input synchronized with the slider.</summary>
     private readonly NumericUpDown _threadInput = new() { Minimum = 1, Maximum = 64, Width = 96, TextAlign = HorizontalAlignment.Center };
-    /// <summary>Allows selecting Gaussian kernel size (3x3, 5x5, 7x7).</summary>
-    private readonly ComboBox _maskSizeCombo = new(){ DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
-    /// <summary>Displays the detected logical processor count.</summary>
+    private readonly ComboBox _maskSizeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
     private readonly Label _threadSummary = new() { AutoSize = true, ForeColor = MutedColor };
-    /// <summary>Shows the active library name or a loading problem.</summary>
     private readonly Label _selectedBackend = new() { AutoSize = true, ForeColor = AccentColor, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
-    /// <summary>Reserved display for the algorithm execution time.</summary>
     private readonly Label _timeValue = new() { Text = "—", AutoSize = true, ForeColor = InkColor, Font = new Font("Segoe UI", 27F, FontStyle.Bold) };
-    /// <summary>Explains that timing is inactive until an algorithm is implemented.</summary>
-    private readonly Label _timeNote = new() { Text = "Pomiar włączy się po dodaniu algorytmu.", AutoSize = true, ForeColor = MutedColor, MaximumSize = new Size(280, 0) };
-    /// <summary>Shows whether both native libraries are available.</summary>
-    private readonly Label _statusPill = new() { AutoSize = true, Padding = new Padding(10, 7, 10, 7), BackColor = Color.FromArgb(226, 232, 240), ForeColor = InkColor, Text = "Szkielet aplikacji" };
-    /// <summary>Shows the selected input filename.</summary>
-    private readonly Label _imageStatus = new() { AutoSize = true, ForeColor = MutedColor };
-    /// <summary>Opens the image picker for the source preview.</summary>
-    private readonly Button _loadImageButton = new() { Text = "Wczytaj obraz", Width = 280, Height = 42 };
-    /// <summary>Reserved for the future algorithm execution action.</summary>
-    private readonly Button _runButton = new() { Text = "Uruchom algorytm", Width = 280, Height = 42, Enabled = false };
-    /// <summary>Saves the processed output bitmap to disk.</summary>
-    private readonly Button _saveButton = new() { Text = "Zapisz wynik", Width = 280, Height = 42, Enabled = false };
-    /// <summary>Runs automated multi-threaded benchmark for C++ and ASM and exports CSV.</summary>
-    private readonly Button _benchmarkButton = new() { Text = "Benchmark (CSV)", Width = 280, Height = 42, Enabled = false };
-    /// <summary>Displays the loaded source image.</summary>
-    private readonly PictureBox _sourcePreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
-    /// <summary>Displays the filtered result after the kernel is implemented.</summary>
-    private readonly PictureBox _resultPreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
-    /// <summary>Placeholder shown before an input image is loaded.</summary>
-    private readonly Label _sourcePlaceholder = new() { Text = "Wczytaj własny obraz, aby zobaczyć podgląd.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
-    /// <summary>Placeholder shown until a filter result exists.</summary>
-    private readonly Label _resultPlaceholder = new() { Text = "Wynik pojawi się po podłączeniu algorytmu.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
+    private readonly Label _statusPill = new() { AutoSize = true, Padding = new Padding(10, 7, 10, 7), BackColor = Color.FromArgb(226, 232, 240), ForeColor = InkColor, Text = "Inicjalizacja" };
 
-    /// <summary>Handle to the loaded C++ DLL and its exported functions.</summary>
+    private readonly Button _loadImageButton = new() { Text = "Wczytaj obraz", Width = 280, Height = 42 };
+    private readonly Button _runButton = new() { Text = "Uruchom algorytm", Width = 280, Height = 42, Enabled = false };
+    private readonly Button _saveButton = new() { Text = "Zapisz wynik", Width = 280, Height = 42, Enabled = false };
+    private readonly Button _benchmarkButton = new() { Text = "Benchmark (CSV)", Width = 280, Height = 42, Enabled = false };
+
+    private readonly PictureBox _sourcePreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
+    private readonly PictureBox _resultPreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
+    private readonly Label _sourcePlaceholder = new() { Text = "Wczytaj własny obraz, aby zobaczyć podgląd.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
+    private readonly Label _resultPlaceholder = new() { Text = "Wynik pojawi się po uruchomieniu algorytmu.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
+
     private NativeBackend? _highLevelBackend;
-    /// <summary>Handle to the loaded ASM DLL and its exported functions.</summary>
     private NativeBackend? _assemblyBackend;
-    /// <summary>Detached bitmap held for the source preview.</summary>
     private Bitmap? _inputBitmap;
-    /// <summary>Prevents recursive value-change handling between the two thread controls.</summary>
     private bool _syncingThreadControls;
 
-    /// <summary>
-    /// Tworzy responsywne okno, inicjalizuje kontrolki i ładuje obie biblioteki DLL.
-    /// </summary>
     public MainForm()
     {
-        Text = "Projekt JA — przetwarzanie obrazu";
+        Text = "Projekt JA — Filtr rozmycia Gaussa";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
-        MinimumSize = new Size(980, 650);
-        ClientSize = new Size(1220, 790);
+        MinimumSize = new Size(1100, 720);
+        ClientSize = new Size(1480, 900);
         BackColor = PageColor;
         ForeColor = InkColor;
         Font = new Font("Segoe UI", 10F);
@@ -103,9 +65,6 @@ internal sealed class MainForm : Form
         _threadInput.ValueChanged += (_, _) => SynchronizeThreadCount((int)_threadInput.Value);
     }
 
-    /// <summary>
-    /// Buduje układ Dock/Anchor, który rozszerza się wraz z oknem i skalą DPI.
-    /// </summary>
     private void BuildLayout()
     {
         var root = new TableLayoutPanel
@@ -140,9 +99,6 @@ internal sealed class MainForm : Form
         body.Controls.Add(BuildPreviewArea(), 1, 0);
     }
 
-    /// <summary>
-    /// Builds the title area and its compact project status badge.
-    /// </summary>
     private Control BuildHeader()
     {
         var header = new Panel { Dock = DockStyle.Fill, BackColor = PageColor };
@@ -156,7 +112,7 @@ internal sealed class MainForm : Form
         };
         var subtitle = new Label
         {
-            Text = "Przetwarzanie obrazu • wspólny szkielet aplikacji",
+            Text = "Filtr rozmycia Gaussa (RGB)",
             AutoSize = true,
             Font = new Font("Segoe UI", 10F),
             ForeColor = MutedColor,
@@ -170,9 +126,6 @@ internal sealed class MainForm : Form
         return header;
     }
 
-    /// <summary>
-    /// Builds the left control card with DLL choice, thread count, timer placeholder and image actions.
-    /// </summary>
     private Control BuildControlCard()
     {
         var card = CreateCard();
@@ -248,15 +201,13 @@ internal sealed class MainForm : Form
         var timerBox = new Panel
         {
             Width = 280,
-            Height = 112,
+            Height = 68,
             BackColor = Color.FromArgb(248, 250, 252),
             Padding = new Padding(12),
             Margin = new Padding(0, 8, 0, 4)
         };
         _timeValue.Location = new Point(12, 8);
-        _timeNote.Location = new Point(14, 60);
         timerBox.Controls.Add(_timeValue);
-        timerBox.Controls.Add(_timeNote);
         flow.Controls.Add(timerBox);
 
         flow.Controls.Add(SectionTitle("Dane wejściowe"));
@@ -266,8 +217,6 @@ internal sealed class MainForm : Form
         _loadImageButton.ForeColor = InkColor;
         _loadImageButton.Margin = new Padding(0, 8, 0, 0);
         flow.Controls.Add(_loadImageButton);
-        _imageStatus.Margin = new Padding(0, 1, 0, 4);
-        flow.Controls.Add(_imageStatus);
 
         _runButton.FlatStyle = FlatStyle.Flat;
         _runButton.FlatAppearance.BorderSize = 0;
@@ -295,42 +244,26 @@ internal sealed class MainForm : Form
         return card;
     }
 
-    /// <summary>
-    /// Builds the input and output preview cards plus a short ABI status line.
-    /// </summary>
     private Control BuildPreviewArea()
     {
         var area = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 2,
+            RowCount = 1,
             BackColor = PageColor,
             Padding = new Padding(12, 0, 0, 0)
         };
         area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         area.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        area.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
 
         area.Controls.Add(BuildImageCard("OBRAZ WEJŚCIOWY", _sourcePreview, _sourcePlaceholder), 0, 0);
         area.Controls.Add(BuildImageCard("WYNIK", _resultPreview, _resultPlaceholder), 1, 0);
 
-        var footer = new Label
-        {
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = MutedColor,
-            Text = "Umowa bibliotek: BGR24 • wspólne eksporty C ABI • liczba wątków przekazywana z GUI"
-        };
-        area.Controls.Add(footer, 0, 1);
-        area.SetColumnSpan(footer, 2);
         return area;
     }
 
-    /// <summary>
-    /// Creates a white card with a title and a scalable image preview.
-    /// </summary>
     private static Control BuildImageCard(string title, PictureBox picture, Label placeholder)
     {
         var card = CreateCard();
@@ -370,9 +303,6 @@ internal sealed class MainForm : Form
         return card;
     }
 
-    /// <summary>
-    /// Creates a reusable padded white panel for the main content cards.
-    /// </summary>
     private static Panel CreateCard()
     {
         return new Panel
@@ -385,9 +315,6 @@ internal sealed class MainForm : Form
         };
     }
 
-    /// <summary>
-    /// Creates a section heading in the control panel.
-    /// </summary>
     private static Label SectionTitle(string text)
     {
         return new Label
@@ -400,9 +327,6 @@ internal sealed class MainForm : Form
         };
     }
 
-    /// <summary>
-    /// Initializes the slider and numeric box with the detected logical processor count.
-    /// </summary>
     private void InitializeThreadCount()
     {
         var detected = Math.Clamp(Environment.ProcessorCount, 1, 64);
@@ -410,9 +334,6 @@ internal sealed class MainForm : Form
         _threadInput.Value = detected;
     }
 
-    /// <summary>
-    /// Loads both DLLs from the application folder; the app stays open if a DLL is missing.
-    /// </summary>
     private void LoadBackends()
     {
         try
@@ -421,7 +342,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            _selectedBackend.Text = $"C++: nie udało się wczytać ({ex.Message})";
+            _selectedBackend.Text = $"C++: błąd ({ex.Message})";
         }
 
         try
@@ -432,7 +353,7 @@ internal sealed class MainForm : Form
         {
             if (_highLevelBackend is null)
             {
-                _selectedBackend.Text = $"ASM: nie udało się wczytać ({ex.Message})";
+                _selectedBackend.Text = $"ASM: błąd ({ex.Message})";
             }
         }
 
@@ -446,9 +367,6 @@ internal sealed class MainForm : Form
             : Color.FromArgb(153, 27, 27);
     }
 
-    /// <summary>
-    /// Updates the displayed library name when the selected radio button changes.
-    /// </summary>
     private void UpdateSelectedBackend()
     {
         var backend = _assemblyOption.Checked ? _assemblyBackend : _highLevelBackend;
@@ -458,15 +376,9 @@ internal sealed class MainForm : Form
             : $"Aktywna biblioteka: {backend.Name}";
     }
 
-    /// <summary>
-    /// Keeps the slider and numeric field synchronized without recursive updates.
-    /// </summary>
     private void SynchronizeThreadCount(int value)
     {
-        if (_syncingThreadControls)
-        {
-            return;
-        }
+        if (_syncingThreadControls) return;
 
         _syncingThreadControls = true;
         _threadSlider.Value = Math.Clamp(value, _threadSlider.Minimum, _threadSlider.Maximum);
@@ -474,9 +386,6 @@ internal sealed class MainForm : Form
         _syncingThreadControls = false;
     }
 
-    /// <summary>
-    /// Opens an image and shows a detached bitmap preview without locking the source file.
-    /// </summary>
     private void LoadImage()
     {
         using var dialog = new OpenFileDialog
@@ -487,13 +396,10 @@ internal sealed class MainForm : Form
             Multiselect = false
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
         string extension = Path.GetExtension(dialog.FileName).ToLower();
-        if (extension != ".jpg" && extension != ".png" && extension != ".bmp")
+        if (extension != ".jpg" && extension != ".jpeg" && extension != ".png" && extension != ".bmp")
         {
             MessageBox.Show(this, "Ten format pliku nie jest wspierany przez wbudowany silnik. Użyj standardowego JPG, PNG lub BMP.",
                 "Brak wsparcia", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -508,9 +414,7 @@ internal sealed class MainForm : Form
             _inputBitmap = detachedBitmap;
             _sourcePreview.Image = detachedBitmap;
             _sourcePlaceholder.Visible = false;
-            _imageStatus.Text = Path.GetFileName(dialog.FileName);
             _timeValue.Text = "—";
-            _timeNote.Text = "Wczytany obraz jest na razie tylko podglądem.";
             _runButton.Enabled = true;
             _runButton.BackColor = AccentColor;
             _runButton.ForeColor = Color.White;
@@ -522,13 +426,11 @@ internal sealed class MainForm : Form
                 _benchmarkButton.ForeColor = InkColor;
             }
 
-            // Auto-reset prawego okna z wynikiem po wczytaniu nowego obrazu
             var previousResult = _resultPreview.Image;
             _resultPreview.Image = null;
             _resultPlaceholder.Visible = true;
             previousResult?.Dispose();
 
-            // Zablokowanie przycisku zapisu do czasu wygenerowania nowego wyniku
             _saveButton.Enabled = false;
             _saveButton.BackColor = Color.FromArgb(226, 232, 240);
             _saveButton.ForeColor = MutedColor;
@@ -546,21 +448,15 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// Releases the preview bitmap and native modules when the window closes.
-    /// </summary>
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _inputBitmap?.Dispose();
+        _resultPreview.Image?.Dispose();
         _highLevelBackend?.Dispose();
         _assemblyBackend?.Dispose();
         base.OnFormClosed(e);
-        _resultPreview.Image?.Dispose();
     }
 
-    /// <summary>
-    /// Zwraca wybrany przez użytkownika rozmiar maski Gaussa (3, 5 lub 7).
-    /// </summary>
     private int GetSelectedMaskSize() => _maskSizeCombo.SelectedIndex switch
     {
         1 => 5,
@@ -568,14 +464,12 @@ internal sealed class MainForm : Form
         _ => 3
     };
 
-    /// <summary>
-    /// Uruchamia wybrany backend (C++ lub ASM) dla aktualnie wczytanego obrazu i wybranej maski.
-    /// </summary>
     private async void RunAlgorithm()
     {
         if (_inputBitmap is null) return;
 
-        NativeBackend? selectedBackend = _highLevelOption.Checked ? _highLevelBackend : _assemblyBackend; if (selectedBackend is null)
+        NativeBackend? selectedBackend = _highLevelOption.Checked ? _highLevelBackend : _assemblyBackend;
+        if (selectedBackend is null)
         {
             MessageBox.Show(this, "Wybrana biblioteka DLL nie została poprawnie załadowana.", "Błąd backendu", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
@@ -592,11 +486,9 @@ internal sealed class MainForm : Form
 
         int threads = (int)_threadInput.Value;
 
-        // Zablokowanie kontrolek na czas przetwarzania w tle
         _runButton.Enabled = false;
         _loadImageButton.Enabled = false;
         _benchmarkButton.Enabled = false;
-        _timeNote.Text = $"Przetwarzanie ({selectedBackend.Name}, maska {maskSize}x{maskSize})...";
 
         using Bitmap normalizedInput = _inputBitmap.Clone(
             new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
@@ -660,7 +552,6 @@ internal sealed class MainForm : Form
             _saveButton.ForeColor = InkColor;
 
             _timeValue.Text = $"{sw.Elapsed.TotalMilliseconds:F2} ms";
-            _timeNote.Text = $"Zakończono pomyślnie ({selectedBackend.Name}, {threads} wątków, maska {maskSize}x{maskSize}).";
         }
         catch (Exception ex)
         {
@@ -669,7 +560,6 @@ internal sealed class MainForm : Form
             outputBitmap.Dispose();
 
             _timeValue.Text = "Błąd";
-            _timeNote.Text = "Wystąpił wyjątek podczas przetwarzania obrazu.";
 
             MessageBox.Show(
                 this,
@@ -689,9 +579,6 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// Zapisuje przetworzony obraz wynikowy do pliku wybranego przez użytkownika.
-    /// </summary>
     private void SaveImage()
     {
         if (_resultPreview.Image is null) return;
@@ -704,10 +591,7 @@ internal sealed class MainForm : Form
             FileName = "wynik_gauss"
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
         try
         {
@@ -732,9 +616,6 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// Przeprowadza pełny benchmark (1..64 wątków, C++ vs ASM) dla wybranej maski i zapisuje wyniki do pliku CSV.
-    /// </summary>
     private async void RunBenchmark()
     {
         if (_inputBitmap is null || _highLevelBackend is null || _assemblyBackend is null) return;
@@ -783,8 +664,8 @@ internal sealed class MainForm : Form
         {
             for (int threads = 1; threads <= maxThreads; threads++)
             {
-                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, maxThreads, iterations, maskSize, "C++");
-                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, maxThreads, iterations, maskSize, "ASM");
+                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, iterations, maskSize);
+                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, iterations, maskSize);
 
                 double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
 
@@ -792,7 +673,6 @@ internal sealed class MainForm : Form
             }
 
             File.WriteAllText(dialog.FileName, csvBuilder.ToString(), System.Text.Encoding.UTF8);
-            _timeNote.Text = $"Benchmark zakończony (1–{maxThreads} wątków, maska {maskSize}x{maskSize}). Zapisano CSV.";
             MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków, maska {maskSize}x{maskSize})!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -810,21 +690,14 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// Pomocnicza metoda wykonująca przebieg rozgrzewkowy oraz N pomiarów dla wybranego backendu, liczby wątków i rozmiaru maski.
-    /// </summary>
     private async Task<double> MeasureBackendAsync(
         NativeBackend backend,
         System.Drawing.Imaging.BitmapData inData,
         System.Drawing.Imaging.BitmapData outData,
         int threads,
-        int maxThreads,
         int iterations,
-        int maskSize,
-        string label)
+        int maskSize)
     {
-        _timeNote.Text = $"Benchmark ({label}, maska {maskSize}x{maskSize}): wątek {threads}/{maxThreads} ({iterations} prób)...";
-
         int radius = maskSize / 2;
         int usableHeight = inData.Height - 2 * radius;
         int rowsPerThread = usableHeight / threads;
@@ -853,10 +726,8 @@ internal sealed class MainForm : Form
             return Task.WhenAll(tasks);
         }
 
-        // 1. Przebieg rozgrzewkowy (Warm-up)
         await RunSinglePassAsync();
 
-        // 2. Właściwe pomiary czasowe
         double totalMs = 0;
         for (int i = 1; i <= iterations; i++)
         {

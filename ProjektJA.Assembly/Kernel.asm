@@ -5,7 +5,7 @@
 ; Wersja: 2.1.0 (Obs³uga masek 3x3, 5x5 oraz 7x7 na 32-bitowych wektorach XMM)
 
 .data
-BackendName db 'ASM x64 SIMD (Gauss RGB 3x3/5x5/7x7)', 0
+BackendName db 'ASM x64 SIMD', 0
 
 align 16
 Mask3x3 dd  1,  2,  1
