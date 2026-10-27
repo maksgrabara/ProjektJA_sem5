@@ -5,8 +5,15 @@
 // Algorytm nak³adania filtra Gaussa polega na tym, ¿e dla ka¿dego piksela w obrazie, obliczamy now¹ wartoœæ jego koloru jako œredni¹ wa¿on¹ wartoœci kolorów jego s¹siadów, gdzie wagi s¹ okreœlone przez maskê Gaussa (3x3, 5x5 lub 7x7). 
 // Wagi te s¹ wiêksze dla pikseli bli¿szych œrodkowi maski i mniejsze dla pikseli dalszych. Po obliczeniu sumy wa¿onej, dzielimy j¹ przez sumê wag (która jest potêg¹ liczby 2) i przypisujemy wynik do piksela w obrazie wyjœciowym.
 
-namespace // Anonimowy namespace?
-{
+
+// Po co jest ten anonimowy namespace?
+// 
+// To taka "sztuczka" na zastosowanie defacto zmiennej globalnej, ale jednak nie do koñca
+// W tym przypadku, nasze zmienne (MASK_3X3, MASK_5X5, MASK_7X7) s¹ typu constexpr - oznacza to, ¿e ich wartoœci nie doœæ, ¿e s¹ znane w czasie kompilacji, to jeszcze nie mog¹ byæ zmieniane w czasie dzia³ania programu
+// 
+// Dodatkowo, dziêki anonimowemu namespace nasze maski maj¹ tzw. internal linkage – z punktu widzenia ca³ego projektu, te tablice w ogóle nie istniej¹ poza tym jednym plikiem
+
+namespace {
     // Maska 3x3 (suma wag = 16 = 2^4)
     constexpr int MASK_3X3[9] = { // Co to jest constexpr?
         1, 2, 1,
@@ -47,7 +54,7 @@ extern "C"
             return static_cast<int>(JA_STATUS::JA_INVALID_ARGS);
         }
 
-        else if (startY < 0 || endY > stride || startY >= endY) {
+        else if (startY < 0 || startY >= endY) {
             return static_cast<int>(JA_STATUS::JA_INVALID_ARGS);
         }
 
@@ -86,7 +93,9 @@ extern "C"
 
         for (int y = startY; y < endY; y++) {
 
-            for (int x = radius; x < (width - radius); x++) {
+			int endX = width - radius;
+
+            for (int x = radius; x < endX; x++) {
 
                 for (int c = 0; c < 3; c++) {
 
