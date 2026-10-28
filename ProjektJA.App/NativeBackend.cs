@@ -1,89 +1,155 @@
-// Projekt: JA ‚Äî przetwarzanie obrazu (temat do zatwierdzenia)
-// Algorytm: dynamiczne ≈Çadowanie wsp√≥lnego interfejsu DLL
-// Autor: [uzupe≈Çniƒá]
-// Data: 2026-10-10
-// Semestr/Rok akademicki: semestr 5 / 2026-2027
-// Wersja: 0.1.0 ‚Äî szkielet
-// Historia zmian: 0.1.0 ‚Äî wstƒôpny loader C ABI
-
+// PrzestrzeÒ nazw odpowiedzialna za komunikacjÍ z kodem natywnym (.asm)
+using System;
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace ProjektJA.App;
 
-/// <summary>
-/// ≈Åaduje jednƒÖ natywnƒÖ bibliotekƒô i przechowuje jej punkty wej≈õcia.
-/// </summary>
+// internal sealed class : internal - oznacza, øe klasa jest widoczna tylko wewnπtrz projektu GUI, a sealed blokuje po niej dziedziczenie (odpowiednik final)
+//
+// Czym jest : IDisposable?
+// To implementacja interfejsu IDisposable (takiego jak w Java - czyli klasa wirutalna z samymi metodami)
+// Ma tylko jedno wymaganie - klasa implementujπca ten interfejs musi posiadaÊ publicznπ metodÍ public void Dispose()
+//
+// A po co nam to?
+// W C# zwyk≥e zmienne i tablice sprzπta automatycznie Garbage Collector (GC). Jednak GC nie ma pojÍcia o istnieniu zewnÍtrznych bibliotek .dll za≥adowanych przez system Windows.
+// Dopisujπc : IDisposable, oznaczamy naszπ klasÍ w systemie .NET: ÑUwaga, ta klasa trzyma w rÍku zasÛb spoza úwiata C# (wskaünik w RAM-ie). Kiedy skoÒczycie z niej korzystaÊ, wywo≥ajcie Dispose(), øeby zwolniÊ pamiÍÊ
 internal sealed class NativeBackend : IDisposable
 {
+    // W C# nie dzielimy klas na bloki np. public: ani private:
+    // S≥owa te dopisujemy przed kaødπ zmiennπ i funkcjπ z osobna
+
+    // W C# napisy w nawiasach kwadratowych [...] nad funkcjπ lub klasπ to tzw. Atrybuty ñ czyli instrukcje dla samego kompilatora mÛwiπce, jak ma wygenerowaÊ kod maszynowy pod maskπ.
+    //
+    // UnmanagedFunctionPointer
+    // W C# kod dzieli siÍ na Managed (zarzπdzany przez úrodowisko .NET) oraz Unmanaged (niezarzπdzany ñ czysty kod maszynowy z C++ lub Asemblera).
+    // Ten atrybut mÛwi kompilatorowi: ÑTen wskaünik na funkcjÍ nie prowadzi do metody C#, tylko wychodzi na zewnπtrz ñ do natywnej biblioteki DLLî.
+    //
+    // (CallingConvention.Cdecl)
+    // W nawiasie podajemy konwencjÍ wywo≥ania.
+    // MÛwimy kompilatorowi C#: ÑKiedy bÍdziesz wywo≥ywaÊ tÍ funkcjÍ, przygotuj rejestry RCX, RDX, R8, R9 oraz Shadow Space na stosie dok≥adnie wed≥ug standardu jÍzyka C / x64 ABI.
+    // delegate to taki jakby typedef - czyli znacznie uproszczona sk≥adnia na normalnie nieprzyjemny typ zmiennej
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate nint GetBackendNameDelegate();
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int ProcessImageDelegate(nint inBuffer, nint outBuffer, int width, int stride, int startY, int endY, int maskSize);
 
-    /// <summary>Operating-system handle returned by NativeLibrary.Load.</summary>
-    private readonly nint _libraryHandle;
-    /// <summary>Managed delegate bound to the native JA_ProcessImage export.</summary>
-    private readonly ProcessImageDelegate _processImage;
+    // Uchwyt do za≥adowanej biblioteki dll
+    // readonly to odpowiednik const w C++
+    private readonly nint libraryHandle;
 
-    /// <summary>
-    /// Nazwa backendu zwr√≥cona przez bibliotekƒô.
-    /// </summary>
+    // Gotowy do wywo≥ania delegat wskazujπcy na funkcjÍ przetwarzajπcπ obraz
+    // Delegata dla GetBackendName nie musimy zapisywaÊ w polu klasy, bo wywo≥amy go tylko raz podczas ≥adowania biblioteki
+    private readonly ProcessImageDelegate processImage;
+
+    // Publiczna w≥aúciwoúÊ read-only przechowujπca nazwÍ backendu
+    // W C# zamiast pisaÊ prywatne pole i osobny, publiczny getter, pisze siÍ jednπ linijkÍ z { get; }
+    // Dzia≥a to jak zmienna, ktÛrπ kaødy z zewnπtrz moøe odczytaÊ, ale tylko konstruktor moøe ustawiÊ
+    //
+    // Dlaczego to jest takie dziwne? Skoro 'setting" jest private, to dlaczego modyfikator dostÍpu jest public?
+    // Bo twÛrcy C# uznali sobie tak:
+    // S≥owo public z przodu okreúla widocznoúÊ ca≥ej w≥aúciwoúci dla úwiata zewnÍtrznego
+    // W klamrach { } wymieniamy, jakie operacje sπ dozwolone (w naszym przypadku get;)
+    // A ca≥a reszta operacji, ktÛre nie zosta≥y w klamrach wymienione, NIE ISTNIEJE dla úwiata zewnÍtreznego (m.in. set;)
     public string Name { get; }
 
-    private NativeBackend(nint libraryHandle, string name, ProcessImageDelegate processImage)
+    // Konstruktor naszej klasy, ktÛry otrzyma uchwyt do uøywanej biblioteki dll, delegata dla odpowiedniej funkcji w bibliotece i samπ nazwÍ biblioteki (High level albo ASM),
+    // a nastÍpnie przypisze je odpowiednim polom w obiekcie naszej klasy
+    private NativeBackend(nint libraryHandle, ProcessImageDelegate processImage, string name)
     {
-        _libraryHandle = libraryHandle;
+        this.libraryHandle = libraryHandle;
+        this.processImage = processImage;
         Name = name;
-        _processImage = processImage;
     }
 
-    /// <summary>
-    /// ≈Åaduje bibliotekƒô z katalogu aplikacji i sprawdza obecno≈õƒá obu eksport√≥w.
-    /// </summary>
+    // Metoda ta otwiera plik .dll, wyciπga z niego adresy naszych dwÛch funkcji (JA_GetBackenName i JA_Process_Image), zamienia je na wskaüniki na funkcje
+    //
+    // Czym jest wskaünik na funkcje?
+    // To adres w pamiÍci RAM na pierwszπ instrukcjÍ danej funkcji.
+    // Dla procesora wywo≥anie funkcji to po prostu skok (CALL jakiú_adres) pod ten adres w RAM-ie.
     public static NativeBackend Load(string fileName)
     {
+        // Sklejamy úcieøkÍ folderu z plikiem .exe oraz nazwÍ pliku .dll
+        //
+        // var to odpowiednik auto z C++
+        //
+        // Co oznacza ta sk≥adnia wewnπtrz .Combine()?
+        // W bezpieczny sposÛb skleja nam ona úcieøkÍ folderu, w ktÛrym uruchomiony jest .exe (AppContext.BaseDirectory) z fileName
+        // DziÍki temu unikamy sytuacji, w ktÛrej Windows zaczπ≥by szukaÊ pliku po samej nazwie (NativeLibrary.Load("LowLevel.dll") w tzw. "bieøπcym katalogu roboczym",
+        // a w efekcie go nie znaleüÊ i zwrÛciÊ b≥πd
         var fullPath = Path.Combine(AppContext.BaseDirectory, fileName);
+
+        // Odpowiednik LoadLibrary z C++ - wczytuje DLL do pamiÍci RAM
+        //
+        // Dlaczego takie coú?
+        // Procesor nie potrafi wykonywaÊ kodu prosto z dysku SSD.
+        // Load kaøe systemowi Windows skopiowaÊ ca≥π zawartoúÊ pliku .dll (zarÛwno sta≥e z .const, jak i rozkazy z .code)
+        // z dysku (pod adresem fullPath) do pamiÍci RAM i zwraca handle ñ czyli adres w pamiÍci RAM, pod ktÛrym ten plik zosta≥ rozpakowany
         var handle = NativeLibrary.Load(fullPath);
 
         try
         {
+            // Szukanie adresÛw naszych funkcji w DLL
+            //
+            // Dzia≥a to w nastÍpujπcy sposÛb:
+            // Plik .dll ma na swoim poczπtku specjalnπ tablicÍ, w ktÛrej zapisane sπ nazwy funkcji oznaczonych przez nas w ASM jako PUBLIC (lub w C++ jako extern "C")
+            // "JA_GetBackendName" leøy 0x1020 bajtÛw od poczπtku biblioteki.
+            // "JA_ProcessImage" leøy 0x1050 bajtÛw od poczπtku biblioteki.
+            // GetExport zaglπda do tej ksiπøki tablicy w RAM-ie, dodaje offset do adresu handle i zwraca dok≥adny adres pamiÍci RAM (nint), pod ktÛrym zaczyna siÍ dana funkcja
             var getNamePointer = NativeLibrary.GetExport(handle, "JA_GetBackendName");
             var processPointer = NativeLibrary.GetExport(handle, "JA_ProcessImage");
+
+            // Zmieniamy surowy adres nint na delegat, ktÛry moøna wywo≥aÊ
+            // 
+            // Dzia≥a to tak:
+            // Marshal.GetDelegateForFunctionPointer<>() bierze surowy adres pamiÍci i pakuje go w wykonywalnπ "kapsu≥Í" (delegate)
+            // W <> podajemy typ szablonu - jaki wzorzec funkcji chcemy ubraÊ nasz adres
+            // W () podajemy argument - surowy adres pamiÍci
             var getName = Marshal.GetDelegateForFunctionPointer<GetBackendNameDelegate>(getNamePointer);
             var process = Marshal.GetDelegateForFunctionPointer<ProcessImageDelegate>(processPointer);
+
+            // Wywo≥ujemy funkcjÍ JA_GetBackendName -> w namePointer lπduje adres etykiety GetBackendName (zapisanej w RAX przez JA_GetBackendName)
             var namePointer = getName();
+
+            // T≥umaczymy adres C-stringa (const char*) na C#-owego stringa
+            //
+            // Dlaczego const char*?
+            // Bo taki jest zapis string'a - jest to adres pierwszej literki naszego ciπgu znakÛw
+            //
+            // ?? to operator oznaczajπcy - jeúli wynik po lewej jest null, uøyj wartoúci po prawej
             var name = Marshal.PtrToStringUTF8(namePointer) ?? fileName;
 
-            return new NativeBackend(handle, name, process);
+            // Static Factory Method - wzorzec projektowy
+            //
+            // Jak to dzia≥a?
+            // Metoda Load() jest statyczna - nie potrzebuje ona obiektu klasy NativeBackend do dzia≥ania
+            // Poniewaø metoda ta leøy wewnπtrz klasy NativeBackend, ma prawo korzystaÊ z prywatnego konstruktora i tym samym zwrÛciÊ gotowy, skonfigurowany obiekt
+            return new NativeBackend(handle, process, name);
         }
+
         catch
         {
+            // W C# metoda NativeLibrary.GetExport(handle, "JA_ProcessImage") dzia≥a tak - jeúli w pliku .dll nie znajdzie funkcji o takiej nazwie, nie zwraca zera,
+            // tylko natychmiast rzuca wyjπtek (Exception) EntryPointNotFoundException i przerywa wykonywanie bloku try.
+            //
+            // Gdyby uøyÊ if'a zamiast try/catch, w momencie rzucania wyjπtku program natychmiast wyskoczy≥by z funkcji Load, a za≥adowana wyøej biblioteka (var handle = NativeLibrary.Load(...))
+            // zosta≥aby na zawsze Ñosieroconaî w pamiÍci RAM (wyciek pamiÍci)
+            // 
+            // Blok catch ≥apie ten wyjπtek w locie, sprzπta pamiÍÊ RAM instrukcjπ NativeLibrary.Free(handle);,
+            // a nastÍpnie instrukcjπ throw; pozwala wyjπtkowi lecieÊ dalej (np. øeby okienko GUI mog≥o wyúwietliÊ komunikat b≥Ídu)
             NativeLibrary.Free(handle);
             throw;
         }
     }
 
-    /// <summary>
-    /// Wywo≈Çuje funkcjƒô przetwarzajƒÖcƒÖ. Obecne biblioteki zwracajƒÖ status ‚Äûniezaimplementowano‚Äù.
-    /// </summary>
-    public int Process(
-        nint sourceBgr24,
-        nint destinationBgr24,
-        int width,
-        int strideBytes,
-        int startY,
-        int endY,
-        int maskSize)
+    public int Process(nint sourceBgr24, nint destinationBgr24, int width, int strideBytes, int startY, int endY, int maskSize)
     {
-        return _processImage(sourceBgr24, destinationBgr24, width, strideBytes, startY, endY, maskSize);
+        return processImage(sourceBgr24, destinationBgr24, width, strideBytes, startY, endY, maskSize);
     }
 
-    /// <summary>
-    /// Zwalnia natywnƒÖ bibliotekƒô po zamkniƒôciu aplikacji.
-    /// </summary>
     public void Dispose()
     {
-        NativeLibrary.Free(_libraryHandle);
+        NativeLibrary.Free(libraryHandle);
     }
 }
