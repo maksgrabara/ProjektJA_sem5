@@ -8,11 +8,14 @@ namespace ProjektJA.App;
 /// </summary>
 internal sealed class MainForm : Form
 {
+    // Definiujemy niestandardowe kolory
     private static readonly Color PageColor = Color.FromArgb(244, 247, 251);
     private static readonly Color InkColor = Color.FromArgb(30, 41, 59);
     private static readonly Color MutedColor = Color.FromArgb(100, 116, 139);
     private static readonly Color AccentColor = Color.FromArgb(37, 99, 235);
 
+    // Ważna kwestia - przyjmujemy konwencję nazewniczą: zmienne ze znakiem _ (np. _runButton) oznaczają pola naszej klasy
+    // Zmienne bez tego znaku to zwykłe zmienne lokalne, któe znikną po wyjściu z funkcji
     private readonly RadioButton _highLevelOption = new() { Text = "C++ — język wysokiego poziomu", AutoSize = true };
     private readonly RadioButton _assemblyOption = new() { Text = "ASM x64 — biblioteka asemblerowa", AutoSize = true };
     private readonly TrackBar _threadSlider = new() { Minimum = 1, Maximum = 64, TickFrequency = 4, SmallChange = 1, LargeChange = 8, Height = 44 };
@@ -33,6 +36,7 @@ internal sealed class MainForm : Form
     private readonly Label _sourcePlaceholder = new() { Text = "Wczytaj własny obraz, aby zobaczyć podgląd.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
     private readonly Label _resultPlaceholder = new() { Text = "Wynik pojawi się po uruchomieniu algorytmu.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
 
+    // Znak ? oznacza, że zmienna moze przyjmować wartość null
     private NativeBackend? _highLevelBackend;
     private NativeBackend? _assemblyBackend;
     private Bitmap? _inputBitmap;
@@ -327,67 +331,127 @@ internal sealed class MainForm : Form
         };
     }
 
+    // Metoda, która wyciąga nam liczbę wątkó logicznych w procesorze na danym sprzęcie
+    // Wywołujemy ją tylko raz w konstruktorze okna
     private void InitializeThreadCount()
     {
+        // "Odpytuje" system Windows o liczbę wątków logicznych procesora
+        // Dla pewności - przycinamy tą wyciągniętą wartość do przedziału 1...64 metodą Clamp(), aby program nie wyrzucił błędu przy uruchomieniu na procesorze ze np. 128 wątkami
         var detected = Math.Clamp(Environment.ProcessorCount, 1, 64);
+
+        // Ustawia pozycję suwaka na wykrytą liczbę wątków
         _threadSlider.Value = detected;
+
+        // Tą samą wartość wpisuje do okienka tekstowego obok suwaka
         _threadInput.Value = detected;
     }
 
-    private void LoadBackends()
+    // Metoda ładująca nam obie biblioteki dll do pamięci RAM i ustawiającej komunikat o powodzeniu (lub niepowodzeniu) tej operacji
+    private void LoadBackend()
     {
         try
         {
+            // Wywołuje naszą klasę NativeBackend, wczytuje bibliotekę C++ do pamięci RAM i zapisuje gotowy obiekt w polu klasy _highLevelBacken
             _highLevelBackend = NativeBackend.Load("ProjektJA.HighLevel.dll");
         }
+
+        // Jeśli plik .dll nie istnieje albo brakuje w nim funkcji, łapie wyjątek do zmiennej ex
         catch (Exception ex)
         {
+            // Wypisuje treść błędu (ex.Message) w etykiecie pod przyciskami wyboru biblioteki.
+            // Znak $ przed cudzysłowem pozwala wstawić zmienną bezpośrednio w klamry {...}
+            // Gdyby go nie było, kompilator potraktowałby klamry i kod wewnątrz nich jak zwykły tekst i wyświetlił dosłownie "C++: błąd ({ex.Message})" zamiast "C++: błąd wiadomość_błędu"
             _selectedBackend.Text = $"C++: błąd ({ex.Message})";
         }
 
+        // Tutaj analogicznie, ale dla biblioteki asemblerowej
+        //
+        // Dlaczego rozbicie na 2 bloki try/catch?
+        // Aby program zadziałał nawet wtedy, kiedy tylko 1 biblioteka została poprawnie załadowana
         try
         {
             _assemblyBackend = NativeBackend.Load("ProjektJA.Assembly.dll");
         }
+
         catch (Exception ex)
         {
-            if (_highLevelBackend is null)
-            {
-                _selectedBackend.Text = $"ASM: błąd ({ex.Message})";
-            }
+            _selectedBackend.Text = $"Asembler: błąd ({ex.Message})";
         }
 
+        // Flaga boolowska, która informuje, czy obie biblioteki zostały poprawnie załadowane do pamięci RAM
+        // is null/is not null to lepsza wersja ==nullptr/!-nullptr, bo nie może zostać przeciążona
+        // Może zdażyć się, że ktoś przeciąży operator porównania == i napisze przeciążenie błędnie, np. przy porównaniu z null próbuje odczytać pole obiektu - co zaskutukuje błędem
         var bothLoaded = _highLevelBackend is not null && _assemblyBackend is not null;
+
+        // Operator trójargumentowy - zaczyna się od warunku (w naszym przypadku bothLoaded, co oznacza defacto warunek bothLoaded == 1)
+        // Następnie znak zapytania "?" i jaką wartość przyjmuje wyrażenie, jeśli warunek jest prawdziwy
+        // Po dwukropku ":" znajduje się analogicznie - informacja jaką wartość przyjmuje wyrażenie, jesli waurnek jest prawdziwy
+        //
+        // Mechanicznie działa to tak - do naszej zmiennej _statusPill.Text wpisywana jest wartość tego trójargumentowego operatora
         _statusPill.Text = bothLoaded ? "Obie DLL wczytane" : "Brak biblioteki DLL";
-        _statusPill.BackColor = bothLoaded
-            ? Color.FromArgb(220, 252, 231)
-            : Color.FromArgb(254, 226, 226);
-        _statusPill.ForeColor = bothLoaded
-            ? Color.FromArgb(22, 101, 52)
-            : Color.FromArgb(153, 27, 27);
+
+        // Dobieramy kolor (_statusPill co to jest?) w zależności od tego, czy obie biblioteki DLL zostały poprawnie załadowane
+        // BackColor to cośtam, a ForeColor to cośtam innego
+        _statusPill.BackColor = bothLoaded ? Color.FromArgb(220, 252, 231) : Color.FromArgb(254, 226, 226);
+        _statusPill.ForeColor = bothLoaded ? Color.FromArgb(22, 101, 52) : Color.FromArgb(153, 27, 27);
     }
 
+    // Metoda obsługująca przełączanie kropki wyboru (RadioButton) między biblioteką C++ a ASM.
     private void UpdateSelectedBackend()
     {
+        // Sprawdza, przy jakiej bibliotece zaznaczona jest kropka w menu i wybiera na tej podstawie odpowiedni wskaźnik
+        //
+        // _assemblyOption.Checked wywołuje metodę Checked dla naszego pola klasy _assemblyOption - zwraca ona wartość 1 (true), jeśli odpowiednia kropka jest zaznaczona
         var backend = _assemblyOption.Checked ? _assemblyBackend : _highLevelBackend;
+
+        // Etykieta na wypadek błędu linijkę niżej
         var label = _assemblyOption.Checked ? "ASM" : "C++";
-        _selectedBackend.Text = backend is null
-            ? $"{label}: biblioteka niedostępna"
-            : $"Aktywna biblioteka: {backend.Name}";
+
+        // Kiedy właściwie backend is null?
+        _selectedBackend.Text = backend is null ? $"{label}: biblioteka niedostępna" : $"Aktywna biblioteka: {backend.Name}";
     }
 
+    // Metoda synchronizująca ze sobą suwak (_threadSlider) oraz pole liczbowe (_threadInput).
     private void SynchronizeThreadCount(int value)
     {
+        // Strażnik chroniący przed nieskończoną pętlą. Kiedy suwak zmienia wartość pola liczbowego, pole liczbowe próbuje z powrotem zmienić suwak.
+        // Jeśli flaga _syncingThreadControls jest już ustawiona na true, funkcja natychmiast się kończy.
         if (_syncingThreadControls) return;
 
+        // Rozpoczęcie aktualizacji kontrolek
         _syncingThreadControls = true;
+
+        // Ustawia suwak na nową wartość value, pilnując, by mieściła się między jego minimum (1) a maksimum (64)
         _threadSlider.Value = Math.Clamp(value, _threadSlider.Minimum, _threadSlider.Maximum);
-        _threadInput.Value = Math.Clamp(value, (int)_threadInput.Minimum, (int)_threadInput.Maximum);
+
+        // Czemu tutaj robi rzutowanie na int?
+        // Bo Kontrolka NumericUpDown w WinForms przechowuje liczby w 128-bitowym typie finansowym decimal, dlatego jej Minimum i Maximum trzeba rzutować na int
+        _threadInput.Value = Math.Clamp(value, (int) _threadInput.Minimum, (int) _threadInput.Maximum);
+
+        // Zakończenie aktualizacji kontrolek
         _syncingThreadControls = false;
     }
 
+    // Metoda zwraca odpowiedni rozmiar maski, w zależności od wyboru pozycji na liście rozwijanej (indeksowanie od 0)
+    //
+    // Co to za dzika składnia?
+    // Strzałka => oznacza, że ciało metody składa się z jednego wyrażenia, którego wynik jest od razu zwracany (odpowiednik return ...;)
+    private int GetSelectedMaskSize() => _maskSizeCombo.SelectedIndex switch
+    {
+        // _ oznacza default - w naszym przypadku 0
+        1 => 5,
+        2 => 7,
+        _ => 3
+    };
+
+    // Metoda otwierająca okno wyboru pliku i wczytująca wybrany obraz do pamięci RAM.
     private void LoadImage()
     {
+        // Tworzy systemowe okienko wyboru pliku. Słówko using gwarantuje automatyczne zwolnienie zasobów okienka przy wyjściu z funkcji.
+        // W klamrach ustawiamy tytuł okna, filtr wyświetlanych rozszerzeń, wymóg istnienia pliku (CheckFileExists) i blokadę zaznaczania wielu plików naraz (Multiselect = false)
+        //
+        // W sekcji Filter, znak pionowej kreski "|" odziedziela to, co widzi użytkownik (opis słowny), od tego, czego szuka Windows
+        // Mamy 2 pary - "Pliki obrazów" -> filtr dla Windowsa "*.bmp;*.png;..." oraz "Wszystkie pliki" -> filtr dla Windowsa "*.*"
         using var dialog = new OpenFileDialog
         {
             Title = "Wybierz obraz do podglądu",
@@ -396,79 +460,182 @@ internal sealed class MainForm : Form
             Multiselect = false
         };
 
+        // Wyświetla okienko użytkownikowi - jeśli ten kliknął "Anuluj" lub zamknął okno krzyżykiem (wynik inny niż OK), przerywamy funkcję
+        //
+        // Co robi dialog.ShowDialog(this)?
+        // Zatrzymuje wykonywanie funkcji LoadImage i wyświetla na ekranie okienko wyboru pliku z dysku.
+        // Przekazanie this (wskaźnika na nasze główne okno) sprawia, że okienko wyboru pliku blokuje główne okno pod spodem, dopóki użytkownik nie wybierze pliku.
+        // Gdy użytkownik kliknie „Otwórz”, metoda zwraca DialogResult.OK. Gdy kliknie „Anuluj” lub X – zwraca DialogResult.Cancel
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
+        // Wyciąga samo rozszerzenie wybranego obrazka i zmienia je na małe litery
         string extension = Path.GetExtension(dialog.FileName).ToLower();
+
+        // Jeśli wybrany został obrazek nieobsługiwanego typu - wyświetla okienko ostrzeżenia i przerywa funkcję
         if (extension != ".jpg" && extension != ".jpeg" && extension != ".png" && extension != ".bmp")
         {
-            MessageBox.Show(this, "Ten format pliku nie jest wspierany przez wbudowany silnik. Użyj standardowego JPG, PNG lub BMP.",
-                "Brak wsparcia", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            // Jakie argumenty przyjmuje MessageBox.Show()?
+            // this – okno rodzica (na środku którego wyskoczy komunikat),
+            // "Ten format..." – główna treść komunikatu wewnątrz okienka,
+            // "Brak wsparcia" – tytuł na górnym pasku małego okienka,
+            // MessageBoxButtons.OK – jakie przyciski wyświetlić na dole (tylko przycisk OK),
+            // MessageBoxIcon.Warning (lub .Error / .Information) – jaką ikonkę systemową narysować obok tekstu (żółty trójkąt ostrzeżenia, czerwony krzyżyk błędu lub niebieskie „i”).
+            MessageBox.Show(this, "Ten format pliku nie jest wspierany. Użyj standardowego JPG, PNG lub BMP.", "Brak wsparcia", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
+        // W bloku try/catch wczytujemy piksele z dysku do pamięci RAM (chroniąc się przed uszkodzonymi plikami).
         try
         {
+            // Wczytuje obraz z dysku - ponieważ Image.FromFile blokuje plik na dysku, oznaczamy go jako using var (zaraz zostanie zamknięty)
+            //
+            // Co ląduje w zmiennej loaded?
+            // Otwarty uchwyt do pliku na dysku. Gdyby spróbować np. zmienić jego nazwę na pulpicie, Windows wyświetliłby błąd: „Plik jest używany przez inny program”
             using var loaded = Image.FromFile(dialog.FileName);
+
+            // Tworzy w pamięci RAM niezależną kopię pikseli z loaded. Dzięki temu, oryginalny plik zostaje zwolniony
+            //
+            // Co znaczy zwolniony?
+            // Oznacza to, że po wyjściu z bloku try, dzięki słówku using, zmienna loaded zostaje zniszczona i zwalnia blokadę pliku na dysku SSD
             var detachedBitmap = new Bitmap(loaded);
+
+            // Zapamiętujemy wskaźnik na poprzedni obrazek (jeśli użytkownik wczytuje kolejne zdjęcie z rzędu),
+            // aby zwolnić jego pamięć RAM dopiero po odpięciu go od kontrolki PictureBox (_sourcePreview).
+            //
+            // A co, jakby tego nie zrobić?
             var previousBitmap = _inputBitmap;
+
+            // Zapisuje nową bitmapę (bmp) w polu klasy
+            // Nową? To co to jest w końcu? Ta kopia naszej oryginalnej bitmapy?
             _inputBitmap = detachedBitmap;
+
+            // Wyświetla tą bitmapę w lewym okienku podglądu
             _sourcePreview.Image = detachedBitmap;
+
+            // Ukrywa szary napis "Wczytaj własny obraz...", żeby odsłonić wczytany obrazek
             _sourcePlaceholder.Visible = false;
+
+            // Resetuje licznik czasu wykonania programu z poprzedniego uruchomienia
             _timeValue.Text = "—";
+
+            // Odblokowuje przycisk "Uruchom algorytm"
             _runButton.Enabled = true;
+
+            // Po odblokowaniu algorytmu zmienia jego kolor
             _runButton.BackColor = AccentColor;
             _runButton.ForeColor = Color.White;
 
+            // Jeśli OBIE biblioteki DLL są wczytane, odblokowuje również przycisk wykonujący benchmark i odpowiednio go koloruje
             if (_highLevelBackend is not null && _assemblyBackend is not null)
             {
                 _benchmarkButton.Enabled = true;
+
                 _benchmarkButton.BackColor = Color.White;
                 _benchmarkButton.ForeColor = InkColor;
             }
 
+            // Zapisujemy wskaźnik na stary wynik programu do tymczasowej zmiennej
             var previousResult = _resultPreview.Image;
+
+            // Odpinamy obrazek od kontrolki , aby okno przestało go rysować
             _resultPreview.Image = null;
+
+            // Wstawiamy na jego miejsce placeholder
             _resultPlaceholder.Visible = true;
+
+            // Dopiero teraz kasujemy stary wynik z pamięci RAM
+            // Gdybyśmy od razu zrobili Dispose() bez odpięcia obrazka od kontrolki, ta próbowałaby wtedy narysować niesitniejący obrazek w oknie, co skutkowałoby błędem
             previousResult?.Dispose();
 
+            // Wyłącza i wyszarza przycisk "Zapisz wynik" (bo dla nowo wczytanego zdjęcia nie uruchomiliśmy jeszcze filtra)
             _saveButton.Enabled = false;
+
             _saveButton.BackColor = Color.FromArgb(226, 232, 240);
             _saveButton.ForeColor = MutedColor;
 
+            // Stary obraz wejściowy nie jest już wyświetlany w _sourcePreview, więc bezpiecznie zwalniamy go z RAM-u.
             previousBitmap?.Dispose();
         }
+
+        // Jeśli plik obrazu był uszkodzony, wyświetla czerwone okienko z opisem błędu
         catch (Exception ex)
         {
-            MessageBox.Show(
-                this,
-                $"Nie udało się wczytać obrazu.\n\n{ex.Message}",
-                "Błąd wczytywania",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+            MessageBox.Show(this, $"Nie udało się wczytać obrazu.\n\n{ex.Message}", "Błąd wczytywania", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
+    // Metoda otwierająca okno zapisu pliku i zapisująca tenże plik, o wybranym rozszerzeniu, w wybranym przez użytkownika miejscu
+    private void SaveImage()
+    {
+        // Ten if to po co?
+        if (_resultPreview.Image is null) return;
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "Zapisz przetworzony obraz",
+            Filter = "Obraz PNG (*.png)|*.png|Mapa bitowa BMP (*.bmp)|*.bmp|Obraz JPEG (*.jpg;*.jpeg)|*.jpg;*.jpeg",
+            DefaultExt = "png",
+            FileName = "wynik_gauss"
+        };
+
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+
+        try
+        {
+            var ext = Path.GetExtension(dialog.FileName).ToLowerInvariant();
+
+            // Czym jest ext switch?
+            var format = ext switch
+            {
+                ".bmp" => System.Drawing.Imaging.ImageFormat.Bmp,
+                ".jpg" or ".jpeg" => System.Drawing.Imaging.ImageFormat.Jpeg,
+                _ => System.Drawing.Imaging.ImageFormat.Png
+            };
+
+            // Zapisuje gotowy obraz z prawego okna na dysk
+            // Jak działa składnia?
+            _resultPreview.Image.Save(dialog.FileName, format);
+        }
+
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Nie udało się zapisać obrazu.\n\n{ex.Message}", "Błąd zapisu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    // Nadpisuje (override) wbudowaną metodę klasy Form, wywoływaną automatycznie przez Windows w momencie zamknięcia okna
+    //
+    // Czemu protected?
+    // Ponieważ twórcy Windowsa w klasie bazowej Form zadeklarowali metodę OnFormClosed jako protected virtual.
+    // W C# nadpisując metodę (override), musimy zachować dokładnie taki sam modyfikator dostępu, jaki nadał jej autor klasy bazowej
+    //
+    // Co jakbyśmy wykorzystali oryginalną metodę i nic w niej nie nadpisywali?
+    // Oryginalna metoda z klasy Form zamknęłaby okienko i posprzątała przyciski, ale nie ma pojęcia o istnieniu naszych własnych pól _inputBitmap, _highLevelBackend i _assemblyBackend,
+    // które zostałyby w pamięci aż do ubicia procesu przez system
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        // Jeśli dane obiekty istnieją w pamięci (znak ? przed kropką oznacza is not null), zwalnia z pamięci RAM wczytaną bitmapę, bitmapę wynikową oraz odładowuje obie bilioteki DLL
+        // Wywołujemy metodę Dispose() z NativeBackend.cs, jeżeli nasze pola nie są null
         _inputBitmap?.Dispose();
+
         _resultPreview.Image?.Dispose();
+
         _highLevelBackend?.Dispose();
+
         _assemblyBackend?.Dispose();
+
+        // Wywołuje oryginalną metodę (base.) z klasy nadrzędnej Form, aby dokończyć standardowe zamykanie okna
         base.OnFormClosed(e);
     }
 
-    private int GetSelectedMaskSize() => _maskSizeCombo.SelectedIndex switch
-    {
-        1 => 5,
-        2 => 7,
-        _ => 3
-    };
-
+    // Co robi metoda?
+    // Co znaczy async?
     private async void RunAlgorithm()
     {
         if (_inputBitmap is null) return;
 
         NativeBackend? selectedBackend = _highLevelOption.Checked ? _highLevelBackend : _assemblyBackend;
+
         if (selectedBackend is null)
         {
             MessageBox.Show(this, "Wybrana biblioteka DLL nie została poprawnie załadowana.", "Błąd backendu", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -476,6 +643,8 @@ internal sealed class MainForm : Form
         }
 
         int maskSize = GetSelectedMaskSize();
+
+        // Bo przy dzieleniu inta na 2, wynik zaokrąglany jest w dół (np. 3/2 da 1)
         int radius = maskSize / 2;
 
         if (_inputBitmap.Width <= maskSize || _inputBitmap.Height <= maskSize)
@@ -484,18 +653,21 @@ internal sealed class MainForm : Form
             return;
         }
 
+        // Po co cast na int?
         int threads = (int)_threadInput.Value;
 
+        // Blokujemy wszystkie przyciski na czas wykonywania algorytmu
         _runButton.Enabled = false;
         _loadImageButton.Enabled = false;
         _benchmarkButton.Enabled = false;
 
-        using Bitmap normalizedInput = _inputBitmap.Clone(
-            new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
-            System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        // Co to jest?
+        using Bitmap normalizedInput = _inputBitmap.Clone(new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height), System.Drawing.Imaging.PixelFormat.Format24bppRgb);
 
+        // To też co jest?
         Bitmap outputBitmap = new Bitmap(normalizedInput.Width, normalizedInput.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
 
+        // Tak samo to?
         var rect = new Rectangle(0, 0, normalizedInput.Width, normalizedInput.Height);
         var inData = normalizedInput.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, normalizedInput.PixelFormat);
         var outData = outputBitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.WriteOnly, outputBitmap.PixelFormat);
@@ -553,6 +725,7 @@ internal sealed class MainForm : Form
 
             _timeValue.Text = $"{sw.Elapsed.TotalMilliseconds:F2} ms";
         }
+
         catch (Exception ex)
         {
             normalizedInput.UnlockBits(inData);
@@ -561,17 +734,17 @@ internal sealed class MainForm : Form
 
             _timeValue.Text = "Błąd";
 
-            MessageBox.Show(
-                this,
-                $"Wystąpił błąd podczas przetwarzania:\n\n{ex.InnerException?.Message ?? ex.Message}",
-                "Błąd wykonania",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+            MessageBox.Show(this, $"Wystąpił błąd podczas przetwarzania:\n\n{ex.InnerException?.Message ?? ex.Message}", "Błąd wykonania", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+
+        // instrukcje w bloku finally wykonają się ZAWSZE
         finally
         {
+            // Po wykonaniu algorytmu z powrotem uruchamiamy przyciski
             _runButton.Enabled = true;
             _loadImageButton.Enabled = true;
+
+            // Już chyba mieliśmy gdzieś tego ifa nie?
             if (_highLevelBackend is not null && _assemblyBackend is not null)
             {
                 _benchmarkButton.Enabled = true;
@@ -579,124 +752,7 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void SaveImage()
-    {
-        if (_resultPreview.Image is null) return;
-
-        using var dialog = new SaveFileDialog
-        {
-            Title = "Zapisz przetworzony obraz",
-            Filter = "Obraz PNG (*.png)|*.png|Mapa bitowa BMP (*.bmp)|*.bmp|Obraz JPEG (*.jpg;*.jpeg)|*.jpg;*.jpeg",
-            DefaultExt = "png",
-            FileName = "wynik_gauss"
-        };
-
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-
-        try
-        {
-            var ext = Path.GetExtension(dialog.FileName).ToLowerInvariant();
-            var format = ext switch
-            {
-                ".bmp" => System.Drawing.Imaging.ImageFormat.Bmp,
-                ".jpg" or ".jpeg" => System.Drawing.Imaging.ImageFormat.Jpeg,
-                _ => System.Drawing.Imaging.ImageFormat.Png
-            };
-
-            _resultPreview.Image.Save(dialog.FileName, format);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                this,
-                $"Nie udało się zapisać obrazu.\n\n{ex.Message}",
-                "Błąd zapisu",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-    }
-
-    private async void RunBenchmark()
-    {
-        if (_inputBitmap is null || _highLevelBackend is null || _assemblyBackend is null) return;
-
-        int maskSize = GetSelectedMaskSize();
-
-        if (_inputBitmap.Width <= maskSize || _inputBitmap.Height <= maskSize)
-        {
-            MessageBox.Show(this, $"Obraz jest zbyt mały dla maski {maskSize}x{maskSize}.", "Zbyt mały obraz", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        using var dialog = new SaveFileDialog
-        {
-            Title = "Zapisz wyniki benchmarku do CSV",
-            Filter = "Plik CSV (*.csv)|*.csv",
-            DefaultExt = "csv",
-            FileName = $"benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}_maska{maskSize}x{maskSize}.csv"
-        };
-
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-
-        int maxThreads = (int)_threadInput.Maximum;
-        const int iterations = 10;
-
-        _runButton.Enabled = false;
-        _loadImageButton.Enabled = false;
-        _benchmarkButton.Enabled = false;
-
-        using Bitmap normalizedInput = _inputBitmap.Clone(
-            new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
-            System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-
-        using Bitmap outputBitmap = new Bitmap(normalizedInput.Width, normalizedInput.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-
-        var rect = new Rectangle(0, 0, normalizedInput.Width, normalizedInput.Height);
-        var inData = normalizedInput.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, normalizedInput.PixelFormat);
-        var outData = outputBitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.WriteOnly, outputBitmap.PixelFormat);
-
-        var csvBuilder = new System.Text.StringBuilder();
-        csvBuilder.AppendLine("Liczba watkow;Sredni czas C++ [ms];Sredni czas ASM [ms];Przyspieszenie (C++/ASM)");
-
-        var plCulture = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
-
-        try
-        {
-            for (int threads = 1; threads <= maxThreads; threads++)
-            {
-                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, iterations, maskSize);
-                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, iterations, maskSize);
-
-                double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
-
-                csvBuilder.AppendLine(string.Format(plCulture, "{0};{1:F4};{2:F4};{3:F2}", threads, cppAvg, asmAvg, speedup));
-            }
-
-            File.WriteAllText(dialog.FileName, csvBuilder.ToString(), System.Text.Encoding.UTF8);
-            MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków, maska {maskSize}x{maskSize})!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, $"Błąd podczas benchmarku:\n\n{ex.InnerException?.Message ?? ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally
-        {
-            normalizedInput.UnlockBits(inData);
-            outputBitmap.UnlockBits(outData);
-
-            _runButton.Enabled = true;
-            _loadImageButton.Enabled = true;
-            _benchmarkButton.Enabled = true;
-        }
-    }
-
-    private async Task<double> MeasureBackendAsync(
-        NativeBackend backend,
-        System.Drawing.Imaging.BitmapData inData,
-        System.Drawing.Imaging.BitmapData outData,
-        int threads,
-        int iterations,
-        int maskSize)
+    private async Task<double> MeasureBackendAsync(NativeBackend backend, System.Drawing.Imaging.BitmapData inData, System.Drawing.Imaging.BitmapData outData, int threads, int iterations, int maskSize)
     {
         int radius = maskSize / 2;
         int usableHeight = inData.Height - 2 * radius;
@@ -729,6 +785,7 @@ internal sealed class MainForm : Form
         await RunSinglePassAsync();
 
         double totalMs = 0;
+
         for (int i = 1; i <= iterations; i++)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -740,5 +797,88 @@ internal sealed class MainForm : Form
         double avgMs = totalMs / iterations;
         _timeValue.Text = $"{avgMs:F2} ms";
         return avgMs;
+    }
+
+    private async void RunBenchmark()
+    {
+        // Po co ten if?
+        if (_inputBitmap is null || _highLevelBackend is null || _assemblyBackend is null) return;
+
+        int maskSize = GetSelectedMaskSize();
+
+        // Wait, po co to tutaj jest? Czy benchmark nie powinien w sumie wywoływać RunAlgorithm()?
+        if (_inputBitmap.Width <= maskSize || _inputBitmap.Height <= maskSize)
+        {
+            MessageBox.Show(this, $"Obraz jest zbyt mały dla maski {maskSize}x{maskSize}.", "Zbyt mały obraz", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "Zapisz wyniki benchmarku do CSV",
+            Filter = "Plik CSV (*.csv)|*.csv",
+            DefaultExt = "csv",
+            FileName = $"benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}_maska{maskSize}x{maskSize}.csv"
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        // Lepsze rozwiązanie niż hardcoded wartość 64
+        int maxThreads = (int)_threadInput.Maximum;
+        const int iterations = 10;
+
+        // Wyłączamy przyciski na czas działania benchmarku
+        _runButton.Enabled = false;
+        _loadImageButton.Enabled = false;
+        _benchmarkButton.Enabled = false;
+
+        // Cały ten blok poniżej co robi?
+        using Bitmap normalizedInput = _inputBitmap.Clone(
+        new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
+        System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+        using Bitmap outputBitmap = new Bitmap(normalizedInput.Width, normalizedInput.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+        var rect = new Rectangle(0, 0, normalizedInput.Width, normalizedInput.Height);
+        var inData = normalizedInput.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, normalizedInput.PixelFormat);
+        var outData = outputBitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.WriteOnly, outputBitmap.PixelFormat);
+
+        var csvBuilder = new System.Text.StringBuilder();
+        csvBuilder.AppendLine("Liczba watkow;Sredni czas C++ [ms];Sredni czas ASM [ms];Przyspieszenie (C++/ASM)");
+
+        // Co to jest?
+        var plCulture = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
+
+        try
+        {
+            for (int threads = 1; threads <= maxThreads; threads++)
+            {
+                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, iterations, maskSize);
+                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, iterations, maskSize);
+
+                double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
+
+                csvBuilder.AppendLine(string.Format(plCulture, "{0};{1:F4};{2:F4};{3:F2}", threads, cppAvg, asmAvg, speedup));
+            }
+
+            File.WriteAllText(dialog.FileName, csvBuilder.ToString(), System.Text.Encoding.UTF8);
+            MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków, maska {maskSize}x{maskSize})!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        catch (Exception ex)
+        {
+            // Czym jest ex.InnerException?.Message ?? ex.Message?
+            MessageBox.Show(this, $"Błąd podczas benchmarku:\n\n{ex.InnerException?.Message ?? ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        finally
+        {
+            normalizedInput.UnlockBits(inData);
+            outputBitmap.UnlockBits(outData);
+
+            _runButton.Enabled = true;
+            _loadImageButton.Enabled = true;
+            _benchmarkButton.Enabled = true;
+        }
     }
 }
