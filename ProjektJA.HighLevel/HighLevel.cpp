@@ -15,7 +15,7 @@
 
 namespace {
     // Maska 3x3 (suma wag = 16 = 2^4)
-    constexpr int MASK_3X3[9] = { // Co to jest constexpr?
+    constexpr int MASK_3X3[9] = {
         1, 2, 1,
         2, 4, 2,
         1, 2, 1
@@ -42,6 +42,7 @@ namespace {
     };
 }
 
+// Znowu extern C - dodaæ komentarz
 extern "C"
 {
     const char* JA_GetBackendName() noexcept {

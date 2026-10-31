@@ -342,7 +342,7 @@ ErrorInvalidArgs:
     ; Etykieta obs³uguj¹ca b³êdne argumenty wejœciowe.
     ; Poniewa¿ skaczemy tu przed wykonaniem instrukcji PUSH, stos jest czysty i nie robimy POP.
 
-    mov  eax, 1                         ; Zwracamy kod b³êdu: JA_STATUS::JA_INVALID_ARGS = 1
+    mov  eax, -1                         ; Zwracamy kod b³êdu: JA_STATUS::JA_INVALID_ARGS = -1
     ret
 
 JA_ProcessImage ENDP

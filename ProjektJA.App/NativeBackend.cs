@@ -143,11 +143,13 @@ internal sealed class NativeBackend : IDisposable
         }
     }
 
+    // Co to i po co nam?
     public int Process(nint sourceBgr24, nint destinationBgr24, int width, int strideBytes, int startY, int endY, int maskSize)
     {
         return processImage(sourceBgr24, destinationBgr24, width, strideBytes, startY, endY, maskSize);
     }
 
+    // Warto opisaæ co to robi
     public void Dispose()
     {
         NativeLibrary.Free(libraryHandle);
