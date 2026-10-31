@@ -3,28 +3,32 @@ using System.Windows.Forms;
 
 namespace ProjektJA.App;
 
-// W C# każda funkcja musi znajdować się wewnątrz jakiejś klasy (nie ma "wolnych" funkcji globalnych jak w C++).
-// Słowo 'static' przy klasie oznacza, że nie można z niej utworzyć obiektu (new Program() jest zabronione)
-// Klasa ta służy wyłącznie jako kontener dla punktu wejścia programu, czyli metody Main().
+/// <summary>
+/// Punkt startowy aplikacji.
+/// W C# każda funkcja musi należeć do klasy; modyfikator 'static' oznacza, że klasa służy wyłącznie
+/// jako kontener na metodę Main() i nie można utworzyć jej instancji (new Program()).
+/// </summary>
 internal static class Program
 {
-    // Atrybut [STAThread] (Single-Threaded Apartment) informuje system Windows, że główny wątek interfejsu
-    // graficznego (GUI) używa jednowątkowego modelu komunikacji z systemowymi komponentami COM.
-    //
-    // Jest to wymagane przez Windows Forms, aby poprawnie działały m.in. systemowe okna dialogowe
-    // wczytywania/zapisywania plików (OpenFileDialog / SaveFileDialog) oraz schowek systemowy.
-    //
-    // Nie ogranicza to w żaden sposób naszych wątków roboczych przetwarzających obraz w tle.
+    /// <summary>
+    /// Inicjalizuje konfigurację graficzną Windows Forms i uruchamia główne okno aplikacji.
+    /// </summary>
+    /// <remarks>
+    /// Atrybut [STAThread] (Single-Threaded Apartment) jest wymagany przez systemowe komponenty COM
+    /// wykorzystywane w okienkach dialogowych (OpenFileDialog / SaveFileDialog) oraz schowku.
+    /// Dotyczy on wyłącznie głównego wątku GUI i nie ogranicza wielowątkowości obliczeniowej w tle.
+    /// No a co faktycznie robi?
+    /// </remarks>
     [STAThread]
     private static void Main()
     {
-        // Konfiguruje domyślne ustawienia graficzne aplikacji: włącza nowoczesne style wizualne kontrolek Windows
-        // oraz automatyczne skalowanie ostrości interfejsu dla ekranów o wysokiej rozdzielczości (High DPI).
+        // Tak ogólnie, to są to jakieś metody od obiektów z biblioteki WinForms?
+
+        // Włącza nowoczesne style wizualne kontrolek oraz automatyczne skalowanie ostrości (High DPI).
         ApplicationConfiguration.Initialize();
 
-        // Tworzy instancję głównego okna aplikacji (new MainForm()), wyświetla je na ekranie
-        // i uruchamia główną pętlę komunikatów systemu Windows (odpowiednik pętli GetMessage/DispatchMessage z WinAPI).
-        // Wykonywanie programu zatrzymuje się na tej linijce aż do momentu zamknięcia okna przez użytkownika.
+        // Tworzy główne okno i uruchamia pętlę komunikatów systemu Windows
+        // Wykonywanie programu zatrzymuje się na tej instrukcji aż do zamknięcia okna MainForm.
         Application.Run(new MainForm());
     }
 }

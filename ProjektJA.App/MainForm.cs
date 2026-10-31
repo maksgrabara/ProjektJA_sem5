@@ -6,6 +6,8 @@ namespace ProjektJA.App;
 /// <summary>
 /// Główne okno aplikacji z elementami wspólnymi dla obu bibliotek.
 /// </summary>
+// Klasa ta implementuje interfejs Form, który zawiera w sobie elementy służące do kreowania GUI. Dzięki temu, możemy korzystać z nich wewnątrz tej klasy
+// Chociaż to w sumie chyba nie jest interfejs? Chyba, że np. RadioButton to metoda
 internal sealed class MainForm : Form
 {
     // Definiujemy niestandardowe kolory
@@ -16,6 +18,9 @@ internal sealed class MainForm : Form
 
     // Ważna kwestia - przyjmujemy konwencję nazewniczą: zmienne ze znakiem _ (np. _runButton) oznaczają pola naszej klasy
     // Zmienne bez tego znaku to zwykłe zmienne lokalne, któe znikną po wyjściu z funkcji
+    // Ciekawi mnie składnia tych obiektów. Czemu argumenty podawane są w różnej kolejności? Tak ktoś je po prostu zaprogramował?
+    // Jakie argumenty one przyjmują i czym kazdy z tych obiektów docelowo będzie w aplikacji?
+    // Lepiej opisać w tym miejscu, do czego służą te zmienne, zamiast opisywać to gdzieś niżej
     private readonly RadioButton _highLevelOption = new() { Text = "C++ — język wysokiego poziomu", AutoSize = true };
     private readonly RadioButton _assemblyOption = new() { Text = "ASM x64 — biblioteka asemblerowa", AutoSize = true };
     private readonly TrackBar _threadSlider = new() { Minimum = 1, Maximum = 64, TickFrequency = 4, SmallChange = 1, LargeChange = 8, Height = 44 };
@@ -41,7 +46,8 @@ internal sealed class MainForm : Form
     private NativeBackend? _assemblyBackend;
     private Bitmap? _inputBitmap;
     private bool _syncingThreadControls;
-
+    
+    // Well, konstruktor. Przypisuje polom klasy odpowiednie wartości - nic odkrywczego
     public MainForm()
     {
         Text = "Projekt JA — Filtr rozmycia Gaussa";
@@ -68,7 +74,10 @@ internal sealed class MainForm : Form
         _threadSlider.ValueChanged += (_, _) => SynchronizeThreadCount(_threadSlider.Value);
         _threadInput.ValueChanged += (_, _) => SynchronizeThreadCount((int)_threadInput.Value);
     }
-
+    /// <summary>
+    /// 
+    /// 
+    /// </summary>
     private void BuildLayout()
     {
         var root = new TableLayoutPanel

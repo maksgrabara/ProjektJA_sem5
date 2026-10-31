@@ -169,5 +169,7 @@ extern "C"
 
             }
         }
+
+        return static_cast<int>(JA_STATUS::JA_STATUS_OK);
     }
 }

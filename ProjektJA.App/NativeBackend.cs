@@ -5,15 +5,16 @@ using System.Runtime.InteropServices;
 
 namespace ProjektJA.App;
 
-// internal sealed class : internal - oznacza, ¿e klasa jest widoczna tylko wewn¹trz projektu GUI, a sealed blokuje po niej dziedziczenie (odpowiednik final)
-//
-// Czym jest : IDisposable?
-// To implementacja interfejsu IDisposable (takiego jak w Java - czyli klasa wirutalna z samymi metodami)
-// Ma tylko jedno wymaganie - klasa implementuj¹ca ten interfejs musi posiadaæ publiczn¹ metodê public void Dispose()
-//
-// A po co nam to?
-// W C# zwyk³e zmienne i tablice sprz¹ta automatycznie Garbage Collector (GC). Jednak GC nie ma pojêcia o istnieniu zewnêtrznych bibliotek .dll za³adowanych przez system Windows.
-// Dopisuj¹c : IDisposable, oznaczamy nasz¹ klasê w systemie .NET: „Uwaga, ta klasa trzyma w rêku zasób spoza œwiata C# (wskaŸnik w RAM-ie). Kiedy skoñczycie z niej korzystaæ, wywo³ajcie Dispose(), ¿eby zwolniæ pamiêæ
+/// <summary>
+/// Odpowiada za dynamiczne ³adowanie natywnej biblioteki DLL (C++ lub ASM) do pamiêci RAM
+/// oraz udostêpnia jej funkcje obliczeniowe w œwiecie zarz¹dzanym C#.
+/// </summary>
+/// <remarks>
+/// - internal: klasa widoczna tylko wewn¹trz bie¿¹cego projektu (jak brak dllexport).
+/// - sealed: blokuje dziedziczenie po klasie (odpowiednik 'final' w C++).
+/// - : IDisposable: implementacja interfejsu wymuszaj¹cego dodanie publicznej metody void Dispose().
+/// W C# zwyk³e zmienne i tablice sprz¹ta automatycznie Garbage Collector (GC). Jednak GC nie ma pojêcia o istnieniu zewnêtrznych bibliotek .dll za³adowanych przez system Windows.
+/// Dopisuj¹c : IDisposable, oznaczamy nasz¹ klasê w systemie .NET: „Uwaga, ta klasa trzyma w rêku zasób spoza œwiata C# (wskaŸnik w RAM-ie). Kiedy skoñczycie z niej korzystaæ, wywo³ajcie Dispose(), ¿eby zwolniæ pamiêæ
 internal sealed class NativeBackend : IDisposable
 {
     // W C# nie dzielimy klas na bloki np. public: ani private:
@@ -28,14 +29,16 @@ internal sealed class NativeBackend : IDisposable
     // (CallingConvention.Cdecl)
     // W nawiasie podajemy konwencjê wywo³ania.
     // Mówimy kompilatorowi C#: „Kiedy bêdziesz wywo³ywaæ tê funkcjê, przygotuj rejestry RCX, RDX, R8, R9 oraz Shadow Space na stosie dok³adnie wed³ug standardu jêzyka C / x64 ABI.
-    // delegate to taki jakby typedef - czyli znacznie uproszczona sk³adnia na normalnie nieprzyjemny typ zmiennej
+    //
+    // S³ówko 'delegate' to odpowiednik 'typedef' / 'using' dla wskaŸnika na funkcjê w C++. Trochê tak jak .bat w Windowsie
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate nint GetBackendNameDelegate();
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int ProcessImageDelegate(nint inBuffer, nint outBuffer, int width, int stride, int startY, int endY, int maskSize);
 
-    // Uchwyt do za³adowanej biblioteki dll
+    // Uchwyt do za³adowanej biblioteki dll - to znaczy? Po co nam to jest?
+    //
     // readonly to odpowiednik const w C++
     private readonly nint libraryHandle;
 
@@ -43,19 +46,19 @@ internal sealed class NativeBackend : IDisposable
     // Delegata dla GetBackendName nie musimy zapisywaæ w polu klasy, bo wywo³amy go tylko raz podczas ³adowania biblioteki
     private readonly ProcessImageDelegate processImage;
 
-    // Publiczna w³aœciwoœæ read-only przechowuj¹ca nazwê backendu
-    // W C# zamiast pisaæ prywatne pole i osobny, publiczny getter, pisze siê jedn¹ linijkê z { get; }
-    // Dzia³a to jak zmienna, któr¹ ka¿dy z zewn¹trz mo¿e odczytaæ, ale tylko konstruktor mo¿e ustawiæ
-    //
-    // Dlaczego to jest takie dziwne? Skoro 'setting" jest private, to dlaczego modyfikator dostêpu jest public?
-    // Bo twórcy C# uznali sobie tak:
-    // S³owo public z przodu okreœla widocznoœæ ca³ej w³aœciwoœci dla œwiata zewnêtrznego
-    // W klamrach { } wymieniamy, jakie operacje s¹ dozwolone (w naszym przypadku get;)
-    // A ca³a reszta operacji, które nie zosta³y w klamrach wymienione, NIE ISTNIEJE dla œwiata zewnêtreznego (m.in. set;)
+    /// <summary>
+    /// Publiczna w³aœciwoœæ read-only przechowuj¹ca nazwê backendu
+    /// </summary>
+    /// <remarks>
+    /// W C# zamiast pisaæ prywatne pole i osobny, publiczny getter, pisze siê jedn¹ linijkê z { get; }
+    /// Dzia³a to jak zmienna, któr¹ ka¿dy z zewn¹trz mo¿e odczytaæ, ale tylko konstruktor mo¿e ustawiæ
+    /// 
+    /// S³owo public z przodu okreœla widocznoœæ ca³ej w³aœciwoœci dla œwiata zewnêtrznego
+    /// W klamrach { } wymieniamy, jakie operacje s¹ dozwolone (w naszym przypadku get;)
+    /// A ca³a reszta operacji, które nie zosta³y w klamrach wymienione, NIE ISTNIEJE dla œwiata zewnêtreznego (m.in. set;)
+    /// </remarks>
     public string Name { get; }
 
-    // Konstruktor naszej klasy, który otrzyma uchwyt do u¿ywanej biblioteki dll, delegata dla odpowiedniej funkcji w bibliotece i sam¹ nazwê biblioteki (High level albo ASM),
-    // a nastêpnie przypisze je odpowiednim polom w obiekcie naszej klasy
     private NativeBackend(nint libraryHandle, ProcessImageDelegate processImage, string name)
     {
         this.libraryHandle = libraryHandle;
@@ -63,11 +66,10 @@ internal sealed class NativeBackend : IDisposable
         Name = name;
     }
 
-    // Metoda ta otwiera plik .dll, wyci¹ga z niego adresy naszych dwóch funkcji (JA_GetBackenName i JA_Process_Image), zamienia je na wskaŸniki na funkcje
-    //
-    // Czym jest wskaŸnik na funkcje?
-    // To adres w pamiêci RAM na pierwsz¹ instrukcjê danej funkcji.
-    // Dla procesora wywo³anie funkcji to po prostu skok (CALL jakiœ_adres) pod ten adres w RAM-ie.
+    /// <summary>
+    /// Wczytuje plik .dll z katalogu aplikacji do pamiêci RAM, pobiera adresy funkcji z tablicy eksportów
+    /// i zwraca skonfigurowany obiekt NativeBackend (wzorzec Static Factory Method).
+    /// </summary>
     public static NativeBackend Load(string fileName)
     {
         // Sklejamy œcie¿kê folderu z plikiem .exe oraz nazwê pliku .dll
@@ -82,7 +84,6 @@ internal sealed class NativeBackend : IDisposable
 
         // Odpowiednik LoadLibrary z C++ - wczytuje DLL do pamiêci RAM
         //
-        // Dlaczego takie coœ?
         // Procesor nie potrafi wykonywaæ kodu prosto z dysku SSD.
         // Load ka¿e systemowi Windows skopiowaæ ca³¹ zawartoœæ pliku .dll (zarówno sta³e z .const, jak i rozkazy z .code)
         // z dysku (pod adresem fullPath) do pamiêci RAM i zwraca handle – czyli adres w pamiêci RAM, pod którym ten plik zosta³ rozpakowany
@@ -143,13 +144,18 @@ internal sealed class NativeBackend : IDisposable
         }
     }
 
-    // Co to i po co nam?
+    // Po co to jest? To jest taka metoda wrapper czy co?
+    /// <summary>
+    /// Wywo³uje natywn¹ funkcjê JA_ProcessImage dla wyznaczonego paska wierszy obrazu.
+    /// </summary>
     public int Process(nint sourceBgr24, nint destinationBgr24, int width, int strideBytes, int startY, int endY, int maskSize)
     {
         return processImage(sourceBgr24, destinationBgr24, width, strideBytes, startY, endY, maskSize);
     }
 
-    // Warto opisaæ co to robi
+    /// <summary>
+    /// Od³adowuje natywn¹ bibliotekê .dll z pamiêci RAM przy zamykaniu aplikacji.
+    /// </summary>
     public void Dispose()
     {
         NativeLibrary.Free(libraryHandle);
