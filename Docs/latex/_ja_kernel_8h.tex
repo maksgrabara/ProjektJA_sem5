@@ -1,0 +1,100 @@
+\doxysection{Projekt\+JA.\+High\+Level/\+\+Ja\+Kernel.h File Reference}
+\hypertarget{_ja_kernel_8h}{}\label{_ja_kernel_8h}\index{ProjektJA.HighLevel/JaKernel.h@{ProjektJA.HighLevel/JaKernel.h}}
+{\ttfamily \+\#include $<$cstdint$>$}\newline
+\doxysubsubsection*{Enumerations}
+\begin{DoxyCompactItemize}
+\item 
+enum class \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62}{JA\+\_\+\+STATUS}} \{ \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62ab310214ffc3bfbceeb3278d1630f8b04}{JA\+\_\+\+STATUS\+\_\+\+OK}} = 0
+, \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62a3a4b2326c2e9f1e4e413d89a1cb3f2d3}{JA\+\_\+\+INVALID\+\_\+\+ARGS}} = -\/1
+ \}
+\begin{DoxyCompactList}\small\item\em Kody statusu wykonania funkcji natywnej zwracane do C\# przez rejestr EAX. \end{DoxyCompactList}\end{DoxyCompactItemize}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+const char \texorpdfstring{$\ast$}{*} \doxymbox{\hyperlink{_ja_kernel_8h_a53c7ce695b10b6e80a4e3c6a5f0a94d8}{JA\+\_\+\+Get\+Backend\+Name}} () noexcept
+\begin{DoxyCompactList}\small\item\em Zwraca w rejestrze RAX wskaŸnik na sta³y ci¹g znaków (C-\/string zakoñczony bajtem zerowym) z nazw¹ aktualnie u¿ywanego silnika obliczeniowego. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{_ja_kernel_8h_a2b3a3ca3967c2bad609b4fca6397c43a}{JA\+\_\+\+Process\+Image}} (std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}in, std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}out, int width, int stride, int startY, int endY, int mask\+Size) noexcept
+\begin{DoxyCompactList}\small\item\em Przetwarza wyznaczony pasek wierszy obrazu za pomoc¹ filtra rozmycia Gaussa (format BGR24). \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\label{_ja_kernel_8h_doc-enum-members}
+\Hypertarget{_ja_kernel_8h_doc-enum-members}
+\doxysubsection{Enumeration Type Documentation}
+\Hypertarget{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62}\index{JaKernel.h@{JaKernel.h}!JA\_STATUS@{JA\_STATUS}}
+\index{JA\_STATUS@{JA\_STATUS}!JaKernel.h@{JaKernel.h}}
+\doxysubsubsection{\texorpdfstring{JA\_STATUS}{JA\_STATUS}}
+{\footnotesize\ttfamily \label{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62} 
+enum class \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62}{JA\+\_\+\+STATUS}}\hspace{0.3cm}{\ttfamily [strong]}}
+
+
+
+Kody statusu wykonania funkcji natywnej zwracane do C\# przez rejestr EAX. 
+
+\begin{DoxyEnumFields}[2]{Enumerator}
+\raisebox{\heightof{T}}[0pt][0pt]{\index{JA\_STATUS\_OK@{JA\_STATUS\_OK}!JaKernel.h@{JaKernel.h}}
+\index{JaKernel.h@{JaKernel.h}!JA\_STATUS\_OK@{JA\_STATUS\_OK}}
+}\Hypertarget{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62ab310214ffc3bfbceeb3278d1630f8b04}\label{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62ab310214ffc3bfbceeb3278d1630f8b04} 
+JA\+\_\+\+STATUS\+\_\+\+OK&\\
+\hline
+
+\raisebox{\heightof{T}}[0pt][0pt]{\index{JA\_INVALID\_ARGS@{JA\_INVALID\_ARGS}!JaKernel.h@{JaKernel.h}}
+\index{JaKernel.h@{JaKernel.h}!JA\_INVALID\_ARGS@{JA\_INVALID\_ARGS}}
+}\Hypertarget{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62a3a4b2326c2e9f1e4e413d89a1cb3f2d3}\label{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62a3a4b2326c2e9f1e4e413d89a1cb3f2d3} 
+JA\+\_\+\+INVALID\+\_\+\+ARGS&\\
+\hline
+
+\end{DoxyEnumFields}
+
+
+\label{_ja_kernel_8h_doc-func-members}
+\Hypertarget{_ja_kernel_8h_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{_ja_kernel_8h_a53c7ce695b10b6e80a4e3c6a5f0a94d8}\index{JaKernel.h@{JaKernel.h}!JA\_GetBackendName@{JA\_GetBackendName}}
+\index{JA\_GetBackendName@{JA\_GetBackendName}!JaKernel.h@{JaKernel.h}}
+\doxysubsubsection{\texorpdfstring{JA\_GetBackendName()}{JA\_GetBackendName()}}
+{\footnotesize\ttfamily \label{_ja_kernel_8h_a53c7ce695b10b6e80a4e3c6a5f0a94d8} 
+const char \texorpdfstring{$\ast$}{*} JA\+\_\+\+Get\+Backend\+Name (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [noexcept]}}
+
+
+
+Zwraca w rejestrze RAX wskaŸnik na sta³y ci¹g znaków (C-\/string zakoñczony bajtem zerowym) z nazw¹ aktualnie u¿ywanego silnika obliczeniowego. 
+
+Zwraca nazwê biblioteki wysokopoziomowej C++.
+
+Specyfikator \textquotesingle{}noexcept\textquotesingle{} gwarantuje, ¿e funkcja nie rzuci wyj¹tku C++ poza granicê biblioteki DLL, co doprowadzi³oby do awarii œrodowiska uruchomieniowego .NET. 
+
+Zwraca w rejestrze RAX wskaŸnik na sta³y ci¹g znaków (C-\/string zakoñczony bajtem zerowym) z nazw¹ aktualnie u¿ywanego silnika obliczeniowego. \Hypertarget{_ja_kernel_8h_a2b3a3ca3967c2bad609b4fca6397c43a}\index{JaKernel.h@{JaKernel.h}!JA\_ProcessImage@{JA\_ProcessImage}}
+\index{JA\_ProcessImage@{JA\_ProcessImage}!JaKernel.h@{JaKernel.h}}
+\doxysubsubsection{\texorpdfstring{JA\_ProcessImage()}{JA\_ProcessImage()}}
+{\footnotesize\ttfamily \label{_ja_kernel_8h_a2b3a3ca3967c2bad609b4fca6397c43a} 
+int JA\+\_\+\+Process\+Image (\begin{DoxyParamCaption}\item[{std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}}]{in}{, }\item[{std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}}]{out}{, }\item[{int}]{width}{, }\item[{int}]{stride}{, }\item[{int}]{startY}{, }\item[{int}]{endY}{, }\item[{int}]{mask\+Size}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [noexcept]}}
+
+
+
+Przetwarza wyznaczony pasek wierszy obrazu za pomoc¹ filtra rozmycia Gaussa (format BGR24). 
+
+Przetwarza wyznaczony zakres wierszy \+[startY, endY) obrazu BGR24 filtrem Gaussa.
+
+
+\begin{DoxyParams}{Parameters}
+{\em in} & WskaŸnik na pierwszy bajt bufora wejœciowego (przekazywany w rejestrze RCX).\\
+\hline
+{\em out} & WskaŸnik na pierwszy bajt bufora wyjœciowego (przekazywany w rejestrze RDX).\\
+\hline
+{\em width} & Szerokoœæ obrazu w pikselach (przekazywana w rejestrze R8D).\\
+\hline
+{\em stride} & Szerokoœæ pojedynczego wiersza w bajtach wraz z paddingiem (przekazywana w rejestrze R9D).\\
+\hline
+{\em startY} & Indeks pocz¹tkowego wiersza paska dla bie¿¹cego w¹tku — w³¹cznie (stos: \+[RSP + 40]).\\
+\hline
+{\em endY} & Indeks koñcowego wiersza paska dla bie¿¹cego w¹tku — wy³¹cznie (stos: \+[RSP + 48]).\\
+\hline
+{\em mask\+Size} & Rozmiar maski Gaussa: 3, 5 lub 7 (stos: \+[RSP + 56]).\\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+Kod statusu z wyliczenia \doxylink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62}{JA\+\_\+\+STATUS} (0 = sukces).
+\end{DoxyReturn}
+
+
+Przetwarza wyznaczony pasek wierszy obrazu za pomoc¹ filtra rozmycia Gaussa (format BGR24). 

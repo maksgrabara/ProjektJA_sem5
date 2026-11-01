@@ -1,0 +1,65 @@
+\doxysection{Projekt\+JA.\+High\+Level/\+\+High\+Level.cpp File Reference}
+\hypertarget{_high_level_8cpp}{}\label{_high_level_8cpp}\index{ProjektJA.HighLevel/HighLevel.cpp@{ProjektJA.HighLevel/HighLevel.cpp}}
+{\ttfamily \+\#include "{}Ja\+Kernel.\+h"{}}\newline
+{\ttfamily \+\#include $<$cstdint$>$}\newline
+{\ttfamily \+\#include $<$algorithm$>$}\newline
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+const char \texorpdfstring{$\ast$}{*} \doxymbox{\hyperlink{_high_level_8cpp_a53c7ce695b10b6e80a4e3c6a5f0a94d8}{JA\+\_\+\+Get\+Backend\+Name}} () noexcept
+\begin{DoxyCompactList}\small\item\em Zwraca nazwê biblioteki wysokopoziomowej C++. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{_high_level_8cpp_a2b3a3ca3967c2bad609b4fca6397c43a}{JA\+\_\+\+Process\+Image}} (std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}in, std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}out, int width, int stride, int startY, int endY, int mask\+Size) noexcept
+\begin{DoxyCompactList}\small\item\em Przetwarza wyznaczony zakres wierszy \+[startY, endY) obrazu BGR24 filtrem Gaussa. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\label{_high_level_8cpp_doc-func-members}
+\Hypertarget{_high_level_8cpp_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{_high_level_8cpp_a53c7ce695b10b6e80a4e3c6a5f0a94d8}\index{HighLevel.cpp@{HighLevel.cpp}!JA\_GetBackendName@{JA\_GetBackendName}}
+\index{JA\_GetBackendName@{JA\_GetBackendName}!HighLevel.cpp@{HighLevel.cpp}}
+\doxysubsubsection{\texorpdfstring{JA\_GetBackendName()}{JA\_GetBackendName()}}
+{\footnotesize\ttfamily \label{_high_level_8cpp_a53c7ce695b10b6e80a4e3c6a5f0a94d8} 
+const char \texorpdfstring{$\ast$}{*} JA\+\_\+\+Get\+Backend\+Name (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [noexcept]}}
+
+
+
+Zwraca nazwê biblioteki wysokopoziomowej C++. 
+
+Zwraca w rejestrze RAX wskaŸnik na sta³y ci¹g znaków (C-\/string zakoñczony bajtem zerowym) z nazw¹ aktualnie u¿ywanego silnika obliczeniowego.
+
+Zwraca nazwê biblioteki wysokopoziomowej C++.
+
+Specyfikator \textquotesingle{}noexcept\textquotesingle{} gwarantuje, ¿e funkcja nie rzuci wyj¹tku C++ poza granicê biblioteki DLL, co doprowadzi³oby do awarii œrodowiska uruchomieniowego .NET. \Hypertarget{_high_level_8cpp_a2b3a3ca3967c2bad609b4fca6397c43a}\index{HighLevel.cpp@{HighLevel.cpp}!JA\_ProcessImage@{JA\_ProcessImage}}
+\index{JA\_ProcessImage@{JA\_ProcessImage}!HighLevel.cpp@{HighLevel.cpp}}
+\doxysubsubsection{\texorpdfstring{JA\_ProcessImage()}{JA\_ProcessImage()}}
+{\footnotesize\ttfamily \label{_high_level_8cpp_a2b3a3ca3967c2bad609b4fca6397c43a} 
+int JA\+\_\+\+Process\+Image (\begin{DoxyParamCaption}\item[{std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}}]{in}{, }\item[{std::\+uint8\+\_\+t \texorpdfstring{$\ast$}{*}}]{out}{, }\item[{int}]{width}{, }\item[{int}]{stride}{, }\item[{int}]{startY}{, }\item[{int}]{endY}{, }\item[{int}]{mask\+Size}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [noexcept]}}
+
+
+
+Przetwarza wyznaczony zakres wierszy \+[startY, endY) obrazu BGR24 filtrem Gaussa. 
+
+Przetwarza wyznaczony pasek wierszy obrazu za pomoc¹ filtra rozmycia Gaussa (format BGR24).
+
+Przetwarza wyznaczony zakres wierszy \+[startY, endY) obrazu BGR24 filtrem Gaussa.
+
+
+\begin{DoxyParams}{Parameters}
+{\em in} & WskaŸnik na pierwszy bajt bufora wejœciowego (przekazywany w rejestrze RCX).\\
+\hline
+{\em out} & WskaŸnik na pierwszy bajt bufora wyjœciowego (przekazywany w rejestrze RDX).\\
+\hline
+{\em width} & Szerokoœæ obrazu w pikselach (przekazywana w rejestrze R8D).\\
+\hline
+{\em stride} & Szerokoœæ pojedynczego wiersza w bajtach wraz z paddingiem (przekazywana w rejestrze R9D).\\
+\hline
+{\em startY} & Indeks pocz¹tkowego wiersza paska dla bie¿¹cego w¹tku — w³¹cznie (stos: \+[RSP + 40]).\\
+\hline
+{\em endY} & Indeks koñcowego wiersza paska dla bie¿¹cego w¹tku — wy³¹cznie (stos: \+[RSP + 48]).\\
+\hline
+{\em mask\+Size} & Rozmiar maski Gaussa: 3, 5 lub 7 (stos: \+[RSP + 56]).\\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+Kod statusu z wyliczenia \doxylink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62}{JA\+\_\+\+STATUS} (0 = sukces).
+\end{DoxyReturn}

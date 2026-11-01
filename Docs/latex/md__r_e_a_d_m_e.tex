@@ -1,0 +1,56 @@
+\chapter{README }
+\hypertarget{md__r_e_a_d_m_e}{}\label{md__r_e_a_d_m_e}\index{README@{README}}
+﻿\# Projekt JA — Filtr rozmycia Gaussa (RGB)
+
+Aplikacja wielowątkowa realizująca filtr dolnoprzepustowy rozmycia Gaussa dla obrazów kolorowych ({\ttfamily 24bpp\+Rgb}), porównująca wydajność implementacji wysokopoziomowej ({\bfseries{C++}}) oraz niskopoziomowej wykorzystującej instrukcje wektorowe {\bfseries{x64 SIMD (SSE2 / SSE4.\+1)}} w asemblerze {\bfseries{MASM}}.
+
+\DoxyHorRuler{0}
+\hypertarget{md__r_e_a_d_m_e_autotoc_md1}{}\doxysubsection{\texorpdfstring{1. Architektura rozwiązania}{1. Architektura rozwiązania}}\label{md__r_e_a_d_m_e_autotoc_md1}
+Projekt został podzielony na 3 niezależne moduły kompilowane do wspólnego katalogu docelowego:
+
+
+\begin{DoxyEnumerate}
+\item {\bfseries{{\ttfamily \doxylink{namespace_projekt_j_a_1_1_app}{Projekt\+JA.\+App}} (C\# / .NET 8 Windows Forms)}}
+\begin{DoxyItemize}
+\item Warstwa interfejsu graficznego (GUI) oraz zarządzania wielowątkowością ({\ttfamily Task.\+Run}, {\ttfamily Task.\+When\+All}).
+\item Dynamiczne ładowanie bibliotek natywnych w czasie wykonania za pomocą {\ttfamily Native\+Library.\+Load} oraz {\ttfamily Marshal.\+Get\+Delegate\+For\+Function\+Pointer} (wzorzec {\itshape Static Factory Method} oraz deterministyczne zwalnianie zasobów przez {\ttfamily IDisposable}).
+\item Bezpośredni dostęp do pamięci fizycznej obrazu za pomocą {\ttfamily Bitmap.\+Lock\+Bits} ({\ttfamily Scan0}, {\ttfamily Stride}) bez narzutu kopiowania pojedynczych pikseli.
+\item Wbudowany moduł automatycznego benchmarku generujący pliki {\ttfamily .csv} dla wszystkich rozmiarów masek ({\ttfamily 3x3}, {\ttfamily 5x5}, {\ttfamily 7x7}) oraz zakresu {\ttfamily 1–64} wątków roboczych (z automatyczną detekcją konfiguracji {\ttfamily Debug} / {\ttfamily Release}).
+\end{DoxyItemize}
+\item {\bfseries{{\ttfamily Projekt\+JA.\+High\+Level.\+dll} (C++)}}
+\begin{DoxyItemize}
+\item Referencyjna implementacja splotu 2D dla bufora {\ttfamily BGR24} eksportowana z zachowaniem kontraktu C ABI ({\ttfamily extern "{}C"{}}, {\ttfamily noexcept}).
+\item Obsługa masek o wymiarach {\ttfamily 3x3} (suma wag \$16 = 2\texorpdfstring{$^\wedge$}{\string^}4\$), {\ttfamily 5x5} (suma wag \$256 = 2\texorpdfstring{$^\wedge$}{\string^}8\$) oraz {\ttfamily 7x7} (suma wag \$4096 = 2\texorpdfstring{$^\wedge$}{\string^}\{12\}\$).
+\item Szybka normalizacja sumy ważonej z wykorzystaniem przesunięć bitowych w prawo ({\ttfamily sum \texorpdfstring{$>$}{>}\texorpdfstring{$>$}{>} shift}) oraz nasycenia do zakresu {\ttfamily 0..255} ({\ttfamily std::\+clamp}).
+\end{DoxyItemize}
+\item {\bfseries{{\ttfamily Projekt\+JA.\+Assembly.\+dll} (MASM x64 SIMD)}}
+\begin{DoxyItemize}
+\item Niskopoziomowa implementacja zgodna z konwencją wywołania {\bfseries{Microsoft x64 Calling Convention}} (argumenty przekazywane przez rejestry {\ttfamily RCX}, {\ttfamily RDX}, {\ttfamily R8D}, {\ttfamily R9D} oraz stos {\ttfamily \+[RSP + 40..56]} z uwzględnieniem {\itshape 32B Shadow Space} i zachowaniem rejestrów nieulotnych {\ttfamily RBX}, {\ttfamily RSI}, {\ttfamily RDI}, {\ttfamily R12–\+R15}).
+\item Równoległe przetwarzanie składowych {\ttfamily \+[B, G, R]} pojedynczego piksela w 128-\/bitowych rejestrach wektorowych {\ttfamily XMM0–\+XMM3}:
+\begin{DoxyItemize}
+\item {\ttfamily pmovzxbd} — bezznakowe rozszerzenie 4 bajtów z bufora wejściowego do czterech 32-\/bitowych liczb całkowitych ({\ttfamily dword}),
+\item {\ttfamily movd} + {\ttfamily pshufd} — załadowanie i rozgłoszenie ({\itshape broadcast}) wagi maski na 4 pozycje wektora {\ttfamily \+[W, W, W, W]},
+\item {\ttfamily pmulld} + {\ttfamily paddd} — wektorowe mnożenie i akumulacja kanałów B, G, R w pojedynczym cyklu pętli,
+\item {\ttfamily psrld} — wektorowa normalizacja wyniku przesunięciem bitowym o wartość {\ttfamily shift},
+\item {\ttfamily packusdw} + {\ttfamily packuswb} — dwustopniowa kompresja 32-\/bitowych sum do 8-\/bitowych bajtów ze sprzętowym nasyceniem ({\itshape unsigned saturation} do przedziału {\ttfamily 0..255}),
+\item Bezpieczny zapis 24-\/bitowy ({\ttfamily word ptr} dla kanałów B, G oraz {\ttfamily byte ptr} po przesunięciu {\ttfamily shr} dla kanału R), zapobiegający nadpisaniu sąsiedniego piksela.
+\end{DoxyItemize}
+\end{DoxyItemize}
+\end{DoxyEnumerate}
+
+\DoxyHorRuler{0}
+\hypertarget{md__r_e_a_d_m_e_autotoc_md3}{}\doxysubsection{\texorpdfstring{2. Podział pracy na wątki robocze}{2. Podział pracy na wątki robocze}}\label{md__r_e_a_d_m_e_autotoc_md3}
+Obraz dzielony jest horyzontalnie na niezależne paski wierszy w zakresie bezpiecznym {\ttfamily \+[radius .. height -\/ radius)}. Przy podziale wysokości roboczej {\ttfamily usable\+Height} na {\ttfamily threads} wątków ({\ttfamily 1–64}):
+\begin{DoxyItemize}
+\item Każdy wątek otrzymuje {\ttfamily usable\+Height / threads} wierszy bazowych,
+\item Pierwsze {\ttfamily usable\+Height \% threads} wątków otrzymuje 1 dodatkowy wiersz, co gwarantuje równomierne obciążenie rdzeni oraz przetworzenie 100\% powierzchni obrazu bez konieczności synchronizacji międzywątkowej (brak blokad {\itshape mutex} dzięki rozłącznym obszarom zapisu w buforze {\ttfamily out}).
+\end{DoxyItemize}
+
+\DoxyHorRuler{0}
+\hypertarget{md__r_e_a_d_m_e_autotoc_md5}{}\doxysubsection{\texorpdfstring{3. Wymagania i kompilacja}{3. Wymagania i kompilacja}}\label{md__r_e_a_d_m_e_autotoc_md5}
+
+\begin{DoxyItemize}
+\item {\bfseries{Środowisko:}} Visual Studio 2022 (z zainstalowanymi pakietami {\itshape .NET desktop development} oraz {\itshape Desktop development with C++} wraz z obsługą {\itshape MASM}).
+\item {\bfseries{Platforma docelowa:}} {\ttfamily x64} (konfiguracje {\ttfamily Debug} oraz {\ttfamily Release}).
+\item {\bfseries{Uruchomienie:}} Otwórz plik {\ttfamily Projekt\+JA.\+sln}, wybierz architekturę {\bfseries{{\ttfamily x64}}} i skompiluj całe rozwiązanie ({\ttfamily Ctrl + Shift + B}). Biblioteki {\ttfamily .dll} są automatycznie kopiowane do katalogu wyjściowego aplikacji C\#. 
+\end{DoxyItemize}

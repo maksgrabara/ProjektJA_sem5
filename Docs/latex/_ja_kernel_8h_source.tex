@@ -1,0 +1,41 @@
+\doxysection{Ja\+Kernel.\+h}
+\hypertarget{_ja_kernel_8h_source}{}\label{_ja_kernel_8h_source}\index{ProjektJA.HighLevel/JaKernel.h@{ProjektJA.HighLevel/JaKernel.h}}
+\doxymbox{\hyperlink{_ja_kernel_8h}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00003\ \textcolor{comment}{//\ Typy\ ca³kowite\ o\ œciœle\ okreœlonym\ rozmiarze\ bitowym\ (np.\ std::uint8\_t\ =\ dok³adnie\ 1\ bajt:\ 0..255).}}
+\DoxyCodeLine{00004\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00005\ }
+\DoxyCodeLine{00006\ \textcolor{comment}{//\ Blok\ extern\ "{}C"{}\ wy³¹cza\ tzw.\ Name\ Mangling\ (dekorowanie\ nazw\ funkcji\ przez\ kompilator\ C++).}}
+\DoxyCodeLine{00007\ \textcolor{comment}{//\ Dziêki\ temu\ w\ tablicy\ eksportów pliku\ .dll\ funkcje\ zachowuj¹\ czyste\ nazwy\ ("{}JA\_GetBackendName"{},\ "{}JA\_ProcessImage"{}),}}
+\DoxyCodeLine{00008\ \textcolor{comment}{//\ pod\ którymi\ mo¿e\ je\ odnaleŸæ C\#\ za\ pomoc¹\ NativeLibrary.GetExport.}}
+\DoxyCodeLine{00009\ \textcolor{comment}{//}}
+\DoxyCodeLine{00010\ \textcolor{comment}{//\ Dlaczego\ ten\ ifdef?}}
+\DoxyCodeLine{00011\ \textcolor{comment}{//\ Pliki\ nag³ówkowe\ .h\ mog¹\ byæ do³¹czane\ zarówno\ do\ plików C++\ (.cpp),\ jak\ i\ czystego\ jêzyka\ C\ (.c).\ Kompilator\ czystego\ jêzyka\ C\ nie\ zna\ s³ów extern\ "{}C"{}\ i\ wyrzuci³by\ b³¹d\ sk³adni.\ }}
+\DoxyCodeLine{00012\ \textcolor{comment}{//\ Dyrektywa\ \#ifdef\ \_\_cplusplus\ sprawia,\ ¿e\ linijka\ extern\ "{}C"{}\ jest\ widoczna\ tylko\ wtedy,\ gdy\ plik\ kompiluje\ kompilator\ C++}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#ifdef\ \_\_cplusplus}}
+\DoxyCodeLine{00014\ \textcolor{keyword}{extern}\ \textcolor{stringliteral}{"{}C"{}}\ \{}
+\DoxyCodeLine{00015\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{00016\ }
+\DoxyCodeLine{00020\ \ \ \ \ \textcolor{keyword}{enum\ class}\ \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62}{JA\_STATUS}}\ \{}
+\DoxyCodeLine{00021\ \ \ \ \ \ \ \ \ \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62ab310214ffc3bfbceeb3278d1630f8b04}{JA\_STATUS\_OK}}\ =\ 0,}
+\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ \doxymbox{\hyperlink{_ja_kernel_8h_a60dd21dd048b08a9a04260723c387a62a3a4b2326c2e9f1e4e413d89a1cb3f2d3}{JA\_INVALID\_ARGS}}\ =\ -\/1}
+\DoxyCodeLine{00023\ \ \ \ \ \};}
+\DoxyCodeLine{00024\ }
+\DoxyCodeLine{00033\ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ \doxymbox{\hyperlink{_high_level_8cpp_a53c7ce695b10b6e80a4e3c6a5f0a94d8}{JA\_GetBackendName}}()\ noexcept;}
+\DoxyCodeLine{00034\ }
+\DoxyCodeLine{00046\ \ \ \ \ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{_high_level_8cpp_a2b3a3ca3967c2bad609b4fca6397c43a}{JA\_ProcessImage}}(}
+\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ std::uint8\_t*\ in,}
+\DoxyCodeLine{00048\ \ \ \ \ \ \ \ \ std::uint8\_t*\ out,}
+\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ width,}
+\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ stride,}
+\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ startY,}
+\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ endY,}
+\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ maskSize)\ noexcept;}
+\DoxyCodeLine{00054\ }
+\DoxyCodeLine{00055\ \textcolor{preprocessor}{\#ifdef\ \_\_cplusplus}}
+\DoxyCodeLine{00056\ \}}
+\DoxyCodeLine{00057\ \textcolor{preprocessor}{\#endif}}
+
+\end{DoxyCode}
