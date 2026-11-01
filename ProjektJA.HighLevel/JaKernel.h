@@ -6,7 +6,10 @@
 // Blok extern "C" wy³¹cza tzw. Name Mangling (dekorowanie nazw funkcji przez kompilator C++).
 // Dziêki temu w tablicy eksportów pliku .dll funkcje zachowuj¹ czyste nazwy ("JA_GetBackendName", "JA_ProcessImage"),
 // pod którymi mo¿e je odnaleŸæ C# za pomoc¹ NativeLibrary.GetExport.
-// Dlaczego ten ifdef i endif?
+//
+// Dlaczego ten ifdef?
+// Pliki nag³ówkowe .h mog¹ byæ do³¹czane zarówno do plików C++ (.cpp), jak i czystego jêzyka C (.c). Kompilator czystego jêzyka C nie zna s³ów extern "C" i wyrzuci³by b³¹d sk³adni. 
+// Dyrektywa #ifdef __cplusplus sprawia, ¿e linijka extern "C" jest widoczna tylko wtedy, gdy plik kompiluje kompilator C++
 #ifdef __cplusplus
 extern "C" {
 #endif

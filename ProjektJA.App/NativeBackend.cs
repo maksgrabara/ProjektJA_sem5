@@ -1,4 +1,4 @@
-// Przestrzeñ nazw odpowiedzialna za komunikacjê z kodem natywnym (.asm)
+// Przestrzenie nazw odpowiedzialne za funkcje systemowe, operacje na œcie¿kach i komunikacjê z kodem natywnym (.cpp / .asm)
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -15,6 +15,7 @@ namespace ProjektJA.App;
 /// - : IDisposable: implementacja interfejsu wymuszaj¹cego dodanie publicznej metody void Dispose().
 /// W C# zwyk³e zmienne i tablice sprz¹ta automatycznie Garbage Collector (GC). Jednak GC nie ma pojêcia o istnieniu zewnêtrznych bibliotek .dll za³adowanych przez system Windows.
 /// Dopisuj¹c : IDisposable, oznaczamy nasz¹ klasê w systemie .NET: „Uwaga, ta klasa trzyma w rêku zasób spoza œwiata C# (wskaŸnik w RAM-ie). Kiedy skoñczycie z niej korzystaæ, wywo³ajcie Dispose(), ¿eby zwolniæ pamiêæ
+/// </remarks>
 internal sealed class NativeBackend : IDisposable
 {
     // W C# nie dzielimy klas na bloki np. public: ani private:
@@ -144,9 +145,9 @@ internal sealed class NativeBackend : IDisposable
         }
     }
 
-    // Po co to jest? To jest taka metoda wrapper czy co?
     /// <summary>
-    /// Wywo³uje natywn¹ funkcjê JA_ProcessImage dla wyznaczonego paska wierszy obrazu.
+    /// Metoda opakowuj¹ca (Wrapper) wywo³uj¹ca natywn¹ funkcjê JA_ProcessImage dla wyznaczonego paska wierszy obrazu.
+    /// Chroni prywatny delegat <processImage> przed bezpoœredni¹ modyfikacj¹ z zewn¹trz klasy.
     /// </summary>
     public int Process(nint sourceBgr24, nint destinationBgr24, int width, int strideBytes, int startY, int endY, int maskSize)
     {

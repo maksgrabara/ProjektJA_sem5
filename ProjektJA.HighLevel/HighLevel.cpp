@@ -2,16 +2,18 @@
 #include <cstdint>
 #include <algorithm>
 
-// Algorytm nak³adania filtra Gaussa polega na tym, ¿e dla ka¿dego piksela w obrazie, obliczamy now¹ wartoœæ jego koloru jako œredni¹ wa¿on¹ wartoœci kolorów jego s¹siadów, gdzie wagi s¹ okreœlone przez maskê Gaussa (3x3, 5x5 lub 7x7). 
-// Wagi te s¹ wiêksze dla pikseli bli¿szych œrodkowi maski i mniejsze dla pikseli dalszych. Po obliczeniu sumy wa¿onej, dzielimy j¹ przez sumê wag (która jest potêg¹ liczby 2) i przypisujemy wynik do piksela w obrazie wyjœciowym.
-
+// Algorytm filtra rozmycia Gaussa:
+// Dla ka¿dego piksela obrazu obliczamy now¹ wartoœæ jego sk³adowych (B, G, R) jako œredni¹ wa¿on¹
+// s¹siednich pikseli okreœlonych przez maskê Gaussa (3x3, 5x5 lub 7x7). Wagi malej¹ wraz z odleg³oœci¹
+// od œrodka maski. Obliczon¹ sumê wa¿on¹ dzielimy przez sumê wszystkich wag maski (bêd¹c¹ potêg¹ dwójki)
+// za pomoc¹ szybkiego przesuniêcia bitowego w prawo.
 
 // Po co jest ten anonimowy namespace?
-// 
-// To taka "sztuczka" na zastosowanie defacto zmiennej globalnej, ale jednak nie do koñca
-// W tym przypadku, nasze zmienne (MASK_3X3, MASK_5X5, MASK_7X7) s¹ typu constexpr - oznacza to, ¿e ich wartoœci nie doœæ, ¿e s¹ znane w czasie kompilacji, to jeszcze nie mog¹ byæ zmieniane w czasie dzia³ania programu
-// 
-// Dodatkowo, dziêki anonimowemu namespace nasze maski maj¹ tzw. internal linkage – z punktu widzenia ca³ego projektu, te tablice w ogóle nie istniej¹ poza tym jednym plikiem
+// To bezpieczna alternatywa dla zmiennych globalnych:
+// Nasze tablice (MASK_3X3, MASK_5X5, MASK_7X7) s¹ typu 'constexpr' — ich wartoœci s¹ znane ju¿ w czasie kompilacji
+// i nie mog¹ byæ zmieniane w trakcie dzia³ania programu (trafiaj¹ do pamiêci tylko do odczytu .rdata).
+// Dziêki anonimowemu namespace maski maj¹ tzw. internal linkage — z punktu widzenia ca³ego projektu
+// tablice te s¹ widoczne wy³¹cznie wewn¹trz tego jednego pliku .cpp i nie koliduj¹ z innymi plikami.
 
 namespace {
     // Maska 3x3 (suma wag = 16 = 2^4)
@@ -42,15 +44,23 @@ namespace {
     };
 }
 
-// Znowu extern C - dodaæ komentarz
+// Blok extern "C" wy³¹cza dekorowanie nazw (Name Mangling) przez kompilator C++,
+// umo¿liwiaj¹c odnalezienie funkcji po czystych nazwach w tablicy eksportów DLL.
 extern "C"
 {
+    /// <summary>
+    /// Zwraca nazwê biblioteki wysokopoziomowej C++.
+    /// </summary>
     const char* JA_GetBackendName() noexcept {
         return "C++ HighLevel";
     }
-
+    
+    /// <summary>
+    /// Przetwarza wyznaczony zakres wierszy [startY, endY) obrazu BGR24 filtrem Gaussa.
+    /// </summary>
     int JA_ProcessImage(std::uint8_t* in, std::uint8_t* out, int width, int stride, int startY, int endY, int maskSize) noexcept {
 
+        // Walidacja argumentów wejœciowych (Guard Clauses)
         if (maskSize != 3 && maskSize != 5 && maskSize != 7) {
             return static_cast<int>(JA_STATUS::JA_INVALID_ARGS);
         }
@@ -67,6 +77,7 @@ extern "C"
             return static_cast<int>(JA_STATUS::JA_INVALID_ARGS);
         }
 
+        // Dobór tablicy wag, promienia maski (radius) oraz przesuniêcia bitowego (shift)
         const int* mask = nullptr;
         int radius = 0;
         int shift = 0;
@@ -92,9 +103,10 @@ extern "C"
             break;
         }
 
-        for (int y = startY; y < endY; y++) {
+        int endX = width - radius;
 
-			int endX = width - radius;
+        // G³ówne pêtle splotu po wierszach (y), kolumnach (x) oraz kana³ach (c: 0=B, 1=G, 2=R)
+        for (int y = startY; y < endY; y++) {
 
             for (int x = radius; x < endX; x++) {
 
@@ -124,7 +136,6 @@ extern "C"
                             // Jak na razie wiemy tylko, gdzie zaczyna siê nasz "plaster", ale nie wiemy jeszcze, gdzie dok³adnie w tym "plastrze" znajduje siê nasza "trójka pikseli"
                             // 
 							// Nastêpnie, aby doszukaæ siê ju¿ lokalizacji samej "trójki", musimy wykonaæ: (x + kx) * 3, bo ka¿dy piksel ma 3 kana³y, a jak ju¿ wiemy, to ka¿dy kana³ jest reprezentowany przez 1 bajt, wiêc musimy pomno¿yæ przez 3, aby znaleŸæ lokalizacjê naszej "trójki" w tablicy 1D
-
                             int pixelIndex = (y + ky) * stride + (x + kx) * 3 + c;
 
 							// Wykonujemy coœ podobnego jak dla pixelIndex, ale tym razem dla wybranej maski (3x3, 5x5 lub 7x7) - w tym przypadku nie musimy siê martwiæ ani o "stride", bo maska jest zawsze kwadratowa i nie ma w niej "paddingu", ani o kana³y, bo mno¿ymy 3 kana³y tego samego piksela przez t¹ sam¹ wagê maski, a nie ró¿ne
@@ -137,11 +148,9 @@ extern "C"
 							// Poniewa¿ ky i kx przyjmuj¹ wartoœci od -radius do +radius, a indeksy w tablicy musz¹ byæ nieujemne, wiêc dodajemy radius, aby przesun¹æ zakres indeksów do nieujemnych wartoœci
                             //
 							// Koñcowo, na podstawie tych informacji, otrzymujemy wzór: (ky + radius) * maskSize + (kx + radius), który pozwala nam znaleŸæ odpowiedni¹ wagê w masce dla danego piksela
-
                             int maskIndex = (ky + radius) * maskSize + (kx + radius);
 
                             // Dereferencja "ukryta" pod nawiasami kwadratowymi - poprawna by³aby tak samo wersja: sum += *(in + pixelIndex) * *(mask + maskIndex);
-
                             sum += in[pixelIndex] * mask[maskIndex];
                         }
                     }
@@ -150,19 +159,15 @@ extern "C"
 
 					// Operacja przesuniêcia bitowego w prawo (>> shift) jest równowa¿na dzieleniu przez odpowiedni¹ potêgê 2 (w naszym przypadku idealne dopasowanie, bo suma wszystkich wag w ka¿dej z masek jest jak¹œ potêg¹ 2)
 					// Jest to o wiele szybsze ni¿ dzielenie, poniewa¿ przesuniêcie bitowe jest operacj¹ na poziomie sprzêtowym, podczas gdy dzielenie jest bardziej z³o¿on¹ operacj¹ arytmetyczn¹
-
                     int result = sum >> shift;
 
                     // Zabezpieczenie przed przekroczeniem zakresu wartoœci piksela (0-255) po zastosowaniu filtra Gaussa
-
                     result = std::clamp(result, 0, 255);
 
 					// Robimy prawie to samo co dla pixelIndex, ale tym razem dla obrazu wyjœciowego (out), bo chcemy zapisaæ now¹ wartoœæ piksela w odpowiednim miejscu w tablicy 1D
-
                     int outIndex = (y * stride) + (x * 3) + c;
 
 					// Nastêpnie przypisujemy obliczon¹ wartoœæ piksela do odpowiedniego miejsca w tablicy wyjœciowej (out), konwertuj¹c j¹ na typ std::uint8_t, aby upewniæ siê, ¿e mieœci siê w zakresie 0-255
-
 					out[outIndex] = static_cast<std::uint8_t>(result);
 
                 }
@@ -170,6 +175,7 @@ extern "C"
             }
         }
 
+        // Zwrócenie kodu sukcesu (0) w rejestrze EAX
         return static_cast<int>(JA_STATUS::JA_STATUS_OK);
     }
 }

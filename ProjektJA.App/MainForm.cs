@@ -1,13 +1,17 @@
 using System.Drawing;
 using System.Windows.Forms;
+using System.Xml.Linq;
 
 namespace ProjektJA.App;
 
 /// <summary>
 /// Główne okno aplikacji z elementami wspólnymi dla obu bibliotek.
 /// </summary>
-// Klasa ta implementuje interfejs Form, który zawiera w sobie elementy służące do kreowania GUI. Dzięki temu, możemy korzystać z nich wewnątrz tej klasy
-// Chociaż to w sumie chyba nie jest interfejs? Chyba, że np. RadioButton to metoda
+/// <remarks>
+/// Form to klasa bazowa (w C# wszystkie interfejsy zaczynają się od wielkiej litery I, np. IDisposable). 
+/// Zapis MainForm : Form oznacza dziedziczenie: nasza klasa przejmuje wszystkie cechy gotowego okna Windowsa.
+/// RadioButton, Button, TrackBar czy Label to nie metody, tylko osobne klasy reprezentujące fizyczne elementy interfejsu(kontrolki), których obiekty tworzymy(new ()) wewnątrz naszego okna.
+/// </remarks>
 internal sealed class MainForm : Form
 {
     // Definiujemy niestandardowe kolory
@@ -18,36 +22,47 @@ internal sealed class MainForm : Form
 
     // Ważna kwestia - przyjmujemy konwencję nazewniczą: zmienne ze znakiem _ (np. _runButton) oznaczają pola naszej klasy
     // Zmienne bez tego znaku to zwykłe zmienne lokalne, któe znikną po wyjściu z funkcji
-    // Ciekawi mnie składnia tych obiektów. Czemu argumenty podawane są w różnej kolejności? Tak ktoś je po prostu zaprogramował?
-    // Jakie argumenty one przyjmują i czym kazdy z tych obiektów docelowo będzie w aplikacji?
-    // Lepiej opisać w tym miejscu, do czego służą te zmienne, zamiast opisywać to gdzieś niżej
+    //
+    // Składnia 'new() { Właściwość = wartość }' to tzw. Object Initializer: wywołuje domyślny konstruktor kontrolki,
+    // a następnie w dowolnej kolejności ustawia wybrane właściwości publiczne (settery) tworzonego obiektu.
+
+    // Kontrolki wyboru biblioteki natywnej (przyciski opcji RadioButton) i rozwijana lista rozmiaru maski (ComboBox)
     private readonly RadioButton _highLevelOption = new() { Text = "C++ — język wysokiego poziomu", AutoSize = true };
     private readonly RadioButton _assemblyOption = new() { Text = "ASM x64 — biblioteka asemblerowa", AutoSize = true };
+    private readonly ComboBox _maskSizeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
+
+    // Kontrolki wyboru liczby wątków: suwak (TrackBar) oraz zsynchronizowane z nim pole liczbowe (NumericUpDown)
     private readonly TrackBar _threadSlider = new() { Minimum = 1, Maximum = 64, TickFrequency = 4, SmallChange = 1, LargeChange = 8, Height = 44 };
     private readonly NumericUpDown _threadInput = new() { Minimum = 1, Maximum = 64, Width = 96, TextAlign = HorizontalAlignment.Center };
-    private readonly ComboBox _maskSizeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
+
+    // Etykiety tekstowe (Label): informacja o rdzeniach CPU, nazwa aktywnego silnika, licznik czasu (ms) oraz pigułka statusu DLL
     private readonly Label _threadSummary = new() { AutoSize = true, ForeColor = MutedColor };
     private readonly Label _selectedBackend = new() { AutoSize = true, ForeColor = AccentColor, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
     private readonly Label _timeValue = new() { Text = "—", AutoSize = true, ForeColor = InkColor, Font = new Font("Segoe UI", 27F, FontStyle.Bold) };
     private readonly Label _statusPill = new() { AutoSize = true, Padding = new Padding(10, 7, 10, 7), BackColor = Color.FromArgb(226, 232, 240), ForeColor = InkColor, Text = "Inicjalizacja" };
 
+    // Przyciski akcji (Button) — uruchomienie, zapis i benchmark są domyślnie zablokowane (Enabled = false) do czasu wczytania obrazu
     private readonly Button _loadImageButton = new() { Text = "Wczytaj obraz", Width = 280, Height = 42 };
     private readonly Button _runButton = new() { Text = "Uruchom algorytm", Width = 280, Height = 42, Enabled = false };
     private readonly Button _saveButton = new() { Text = "Zapisz wynik", Width = 280, Height = 42, Enabled = false };
     private readonly Button _benchmarkButton = new() { Text = "Benchmark (CSV)", Width = 280, Height = 42, Enabled = false };
 
+    // Kontrolki wyświetlające obrazy (PictureBox) wraz z tekstami zastępczymi (Label) widocznymi przed wczytaniem danych
     private readonly PictureBox _sourcePreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
     private readonly PictureBox _resultPreview = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
     private readonly Label _sourcePlaceholder = new() { Text = "Wczytaj własny obraz, aby zobaczyć podgląd.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
     private readonly Label _resultPlaceholder = new() { Text = "Wynik pojawi się po uruchomieniu algorytmu.", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = MutedColor, Padding = new Padding(24) };
 
-    // Znak ? oznacza, że zmienna moze przyjmować wartość null
+    // Stan wewnętrzny aplikacji. Znak '?' (nullable reference type) informuje kompilator, że pole może przyjmować wartość null.
     private NativeBackend? _highLevelBackend;
     private NativeBackend? _assemblyBackend;
     private Bitmap? _inputBitmap;
     private bool _syncingThreadControls;
-    
-    // Well, konstruktor. Przypisuje polom klasy odpowiednie wartości - nic odkrywczego
+
+    /// <summary>
+    /// Konstruktor głównego okna: konfiguruje parametry formularza, buduje siatkę kontrolek,
+    /// wczytuje natywne biblioteki DLL i podpina obsługę zdarzeń (kliknięć oraz zmian wartości).
+    /// </summary>
     public MainForm()
     {
         Text = "Projekt JA — Filtr rozmycia Gaussa";
@@ -74,9 +89,10 @@ internal sealed class MainForm : Form
         _threadSlider.ValueChanged += (_, _) => SynchronizeThreadCount(_threadSlider.Value);
         _threadInput.ValueChanged += (_, _) => SynchronizeThreadCount((int)_threadInput.Value);
     }
+
     /// <summary>
-    /// 
-    /// 
+    /// Tworzy główną siatkę układu okna (TableLayoutPanel) podzieloną na nagłówek
+    /// oraz część roboczą (lewy panel sterowania i prawy obszar podglądu obrazów).
     /// </summary>
     private void BuildLayout()
     {
@@ -112,6 +128,9 @@ internal sealed class MainForm : Form
         body.Controls.Add(BuildPreviewArea(), 1, 0);
     }
 
+    /// <summary>
+    /// Buduje górny pasek nagłówka z tytułem projektu oraz pigułką statusu bibliotek DLL.
+    /// </summary>
     private Control BuildHeader()
     {
         var header = new Panel { Dock = DockStyle.Fill, BackColor = PageColor };
@@ -135,10 +154,17 @@ internal sealed class MainForm : Form
         header.Controls.Add(title);
         header.Controls.Add(subtitle);
         header.Controls.Add(_statusPill);
-        header.Resize += (_, _) => _statusPill.Location = new Point(header.ClientSize.Width - _statusPill.Width - 4, 18);
+
+        void UpdatePillPosition() => _statusPill.Location = new Point(header.ClientSize.Width - _statusPill.Width - 4, 18);
+        header.Resize += (_, _) => UpdatePillPosition();
+        _statusPill.SizeChanged += (_, _) => UpdatePillPosition();
+
         return header;
     }
 
+    /// <summary>
+    /// Buduje lewy panel sterowania zawierający wybór biblioteki, maski, liczby wątków, licznik czasu i przyciski akcji.
+    /// </summary>
     private Control BuildControlCard()
     {
         var card = CreateCard();
@@ -257,6 +283,9 @@ internal sealed class MainForm : Form
         return card;
     }
 
+    /// <summary>
+    /// Buduje prawą sekcję okna z dwoma kartami podglądu: obrazem wejściowym oraz wynikiem.
+    /// </summary>
     private Control BuildPreviewArea()
     {
         var area = new TableLayoutPanel
@@ -277,6 +306,9 @@ internal sealed class MainForm : Form
         return area;
     }
 
+    /// <summary>
+    /// Tworzy pojedynczą kartę podglądu obrazu wraz z nagłówkiem i komunikatem zastępczym (placeholderem).
+    /// </summary>
     private static Control BuildImageCard(string title, PictureBox picture, Label placeholder)
     {
         var card = CreateCard();
@@ -316,6 +348,9 @@ internal sealed class MainForm : Form
         return card;
     }
 
+    /// <summary>
+    /// Tworzy standardowy biały kontener (Panel) z obramowaniem i wewnętrznym marginesem.
+    /// </summary>
     private static Panel CreateCard()
     {
         return new Panel
@@ -328,6 +363,9 @@ internal sealed class MainForm : Form
         };
     }
 
+    /// <summary>
+    /// Tworzy pogrubiony nagłówek sekcji dla lewego panelu sterowania.
+    /// </summary>
     private static Label SectionTitle(string text)
     {
         return new Label
@@ -340,8 +378,9 @@ internal sealed class MainForm : Form
         };
     }
 
-    // Metoda, która wyciąga nam liczbę wątkó logicznych w procesorze na danym sprzęcie
-    // Wywołujemy ją tylko raz w konstruktorze okna
+    /// <summary>
+    /// Odczytuje liczbę wątków logicznych procesora i ustawia domyślną wartość suwaka oraz pola liczbowego.
+    /// </summary>
     private void InitializeThreadCount()
     {
         // "Odpytuje" system Windows o liczbę wątków logicznych procesora
@@ -355,7 +394,9 @@ internal sealed class MainForm : Form
         _threadInput.Value = detected;
     }
 
-    // Metoda ładująca nam obie biblioteki dll do pamięci RAM i ustawiającej komunikat o powodzeniu (lub niepowodzeniu) tej operacji
+    /// <summary>
+    /// Wczytuje obie natywne biblioteki DLL (C++ oraz ASM) do pamięci RAM i aktualizuje pigułkę statusu.
+    /// </summary>
     private void LoadBackends()
     {
         try
@@ -410,7 +451,9 @@ internal sealed class MainForm : Form
         _statusPill.ForeColor = bothLoaded ? Color.FromArgb(22, 101, 52) : Color.FromArgb(153, 27, 27);
     }
 
-    // Metoda obsługująca przełączanie kropki wyboru (RadioButton) między biblioteką C++ a ASM.
+    /// <summary>
+    /// Aktualizuje informację o aktywnym silniku obliczeniowym po przełączeniu przycisku opcji (RadioButton).
+    /// </summary>
     private void UpdateSelectedBackend()
     {
         // Sprawdza, przy jakiej bibliotece zaznaczona jest kropka w menu i wybiera na tej podstawie odpowiedni wskaźnik
@@ -428,7 +471,9 @@ internal sealed class MainForm : Form
         _selectedBackend.Text = backend is null ? $"{label}: biblioteka niedostępna" : $"Aktywna biblioteka: {backend.Name}";
     }
 
-    // Metoda synchronizująca ze sobą suwak (_threadSlider) oraz pole liczbowe (_threadInput).
+    /// <summary>
+    /// Synchronizuje wartość pomiędzy suwakiem (_threadSlider) a polem liczbowym (_threadInput).
+    /// </summary>
     private void SynchronizeThreadCount(int value)
     {
         // Strażnik chroniący przed nieskończoną pętlą. Kiedy suwak zmienia wartość pola liczbowego, pole liczbowe próbuje z powrotem zmienić suwak.
@@ -449,10 +494,12 @@ internal sealed class MainForm : Form
         _syncingThreadControls = false;
     }
 
-    // Metoda zwraca odpowiedni rozmiar maski, w zależności od wyboru pozycji na liście rozwijanej (indeksowanie od 0)
-    //
-    // Co to za dzika składnia?
-    // Strzałka => oznacza, że ciało metody składa się z jednego wyrażenia, którego wynik jest od razu zwracany (odpowiednik return ...;)
+    /// <summary>
+    /// Zwraca wymiar maski Gaussa (3, 5 lub 7) odpowiadający pozycji wybranej na liście rozwijanej.
+    /// </summary>
+    /// <remarks>
+    /// Strzałka => oznacza, że ciało metody składa się z jednego wyrażenia, którego wynik jest od razu zwracany (odpowiednik return ...;)
+    /// </remarks>
     private int GetSelectedMaskSize() => _maskSizeCombo.SelectedIndex switch
     {
         // _ oznacza default - w naszym przypadku 0
@@ -461,7 +508,9 @@ internal sealed class MainForm : Form
         _ => 3
     };
 
-    // Metoda otwierająca okno wyboru pliku i wczytująca wybrany obraz do pamięci RAM.
+    /// <summary>
+    /// Wyświetla okno wyboru pliku graficznego i wczytuje wybrane zdjęcie do pamięci RAM.
+    /// </summary>
     private void LoadImage()
     {
         // Tworzy systemowe okienko wyboru pliku. Słówko using gwarantuje automatyczne zwolnienie zasobów okienka przy wyjściu z funkcji.
@@ -588,7 +637,9 @@ internal sealed class MainForm : Form
         }
     }
 
-    // Metoda otwierająca okno zapisu pliku i zapisująca tenże plik, o wybranym rozszerzeniu, w wybranym przez użytkownika miejscu
+    /// <summary>
+    /// Otwiera okno zapisu pliku i eksportuje przetworzony obraz wynikowy w wybranym formacie (PNG, BMP, JPEG).
+    /// </summary>
     private void SaveImage()
     {
         // Zabezpieczenie (Guard Clause): sprawdzamy, czy w prawym okienku podglądu faktycznie znajduje się
@@ -622,7 +673,7 @@ internal sealed class MainForm : Form
             };
 
             // Zapisuje gotowy obraz z prawego okna na dysk
-
+            //
             // Jak działa składnia?
             // _resultPreview.Image -> sięgamy do prawego okienka podglądu i bierzemy przechowywany w nim obiekt przetworzonego obrazu,
             // .Save(...) -> wywołujemy na tym obrazie wbudowaną metodę zapisu na dysk,
@@ -637,12 +688,13 @@ internal sealed class MainForm : Form
         }
     }
 
-    // Główna metoda wykonawcza uruchamiana przyciskiem "Uruchom algorytm"
-    // Konwertuje obraz do formatu 24-bitowego BGR, blokuje go w RAM-ie, dzieli na paski dla wątków,
-    // wywołuje wybraną bibliotekę (C++ lub ASM), mierzy czas wykonania i wyświetla wynik.
-    //
-    // Co znaczy async?
-    // Oznacza, że funkcja może poczekać na zakończenie wątków w tle (await) bez zamrażania okienka programu.
+    /// <summary>
+    /// Główna metoda uruchomieniowa filtra: normalizuje obraz do formatu 24bppRgb, blokuje pamięć fizyczną (Bitmap.LockBits),
+    /// dzieli obraz na paski wierszy pomiędzy wybraną liczbę wątków i mierzy czas wykonania wybranej biblioteki DLL.
+    /// </summary>
+    /// <remarks>
+    /// Modyfikator 'async' pozwala zawiesić wykonywanie metody w punkcie 'await Task.WhenAll(tasks)' bez blokowania głównego wątku GUI.
+    /// </remarks>
     private async void RunAlgorithm()
     {
         // Jeśli nie wczytano jeszcze żadnego obrazu, przerywamy działanie
@@ -803,47 +855,51 @@ internal sealed class MainForm : Form
         }
     }
 
-    // Automatyczny test wydajnościowy (Benchmark): uruchamia obie biblioteki dla każdej liczby wątków od 1 do 64
-    // (po 10 powtórzeń na każdy przypadek) i zapisuje tabelę porównawczą do pliku CSV (do wykresów w Excelu).
+    /// <summary>
+    /// Przeprowadza automatyczny test wydajnościowy obu bibliotek dla wszystkich trzech masek (3x3, 5x5, 7x7)
+    /// oraz liczby wątków od 1 do 64, zapisując 3 pliki CSV w automatycznie utworzonym katalogu.
+    /// </summary>
     private async void RunBenchmark()
     {
-        // Guard Clause: benchmark porównuje C++ i ASM na obrazie. Jeśli brakuje obrazu lub którejkolwiek biblioteki, wychodzimy.
         if (_inputBitmap is null || _highLevelBackend is null || _assemblyBackend is null) return;
 
-        int maskSize = GetSelectedMaskSize();
-
-        // Dlaczego nie wywołujemy tu po prostu RunAlgorithm()?
-        // Ponieważ benchmark wykonuje 64 (wątki) * 2 (biblioteki) * 11 (1 rozgrzewka + 10 pomiarów) = 1408 przebiegów!
-        // Gdybyśmy wywołali RunAlgorithm() 1408 razy, program 1408 razy klonowałby bitmapę i odrysowywał ekran.
-        // Tutaj przygotowujemy i blokujemy pamięć (LockBits) TYLKO RAZ przed pętlą i mierzymy czysty kod C++/ASM!
-        if (_inputBitmap.Width <= maskSize || _inputBitmap.Height <= maskSize)
+        // Sprawdzamy, czy obraz jest większy niż największa testowana maska (7x7)
+        if (_inputBitmap.Width <= 7 || _inputBitmap.Height <= 7)
         {
-            MessageBox.Show(this, $"Obraz jest zbyt mały dla maski {maskSize}x{maskSize}.", "Zbyt mały obraz", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Obraz jest zbyt mały dla największej maski 7x7 (wymagane minimum 8x8 px).", "Zbyt mały obraz", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        // Okienko wyboru miejsca zapisu wygenerowanego pliku .csv
-        using var dialog = new SaveFileDialog
+        // Okno wyboru katalogu nadrzędnego, w którym program utworzy podfolder z wynikami
+        using var folderDialog = new FolderBrowserDialog
         {
-            Title = "Zapisz wyniki benchmarku do CSV",
-            Filter = "Plik CSV (*.csv)|*.csv",
-            DefaultExt = "csv",
-            FileName = $"benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}_maska{maskSize}x{maskSize}.csv"
+            Description = "Wybierz miejsce, w którym zostanie utworzony folder z 3 plikami CSV (3x3, 5x5, 7x7)",
+            UseDescriptionForTitle = true
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (folderDialog.ShowDialog(this) != DialogResult.OK) return;
 
-        // Pobieramy maksymalną liczbę wątków z kontrolki (64) i ustalamy 10 powtórzeń na każdy pomiar
+        // Dyrektywa preprocesora automatycznie rozpoznaje, czy program uruchomiono w konfiguracji Debug czy Release
+#if DEBUG
+        const string buildConfig = "Debug";
+#else
+        const string buildConfig = "Release";
+#endif
+
+        // Tworzymy docelowy podfolder, np. "Benchmark_1920x1080_Release"
+        string folderName = $"Benchmark_{_inputBitmap.Width}x{_inputBitmap.Height}_{buildConfig}";
+        string targetDirectory = Path.Combine(folderDialog.SelectedPath, folderName);
+        Directory.CreateDirectory(targetDirectory);
+
         int maxThreads = (int)_threadInput.Maximum;
         const int iterations = 10;
+        int[] masksToTest = [3, 5, 7];
 
-        // Wyłączamy przyciski na czas działania benchmarku
         _runButton.Enabled = false;
         _loadImageButton.Enabled = false;
         _benchmarkButton.Enabled = false;
 
-        // Jednorazowe przygotowanie buforów 24-bitowych i przypięcie ich w pamięci RAM (LockBits) na czas całego benchmarku.
-        // Obie bitmapy mają 'using', bo po zapisaniu pliku CSV mogą zostać automatycznie usunięte z pamięci RAM.
+        // Jednorazowe przygotowanie buforów 24bppRgb i przypięcie ich w pamięci RAM (LockBits) dla wszystkich 3 masek
         using Bitmap normalizedInput = _inputBitmap.Clone(
             new Rectangle(0, 0, _inputBitmap.Width, _inputBitmap.Height),
             System.Drawing.Imaging.PixelFormat.Format24bppRgb);
@@ -854,55 +910,61 @@ internal sealed class MainForm : Form
         var inData = normalizedInput.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, normalizedInput.PixelFormat);
         var outData = outputBitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.WriteOnly, outputBitmap.PixelFormat);
 
-        // StringBuilder to szybki bufor tekstowy w pamięci RAM, w którym budujemy kolejne wiersze pliku CSV
-        var csvBuilder = new System.Text.StringBuilder();
-        csvBuilder.AppendLine("Liczba watkow;Sredni czas C++ [ms];Sredni czas ASM [ms];Przyspieszenie (C++/ASM)");
-
-        // Pobieramy polskie formatowanie regionalne (przecinek jako separator ułamków zamiast kropki),
-        // aby polski MS Excel poprawnie rozpoznawał liczby w pliku CSV i nie zamieniał ich na daty.
         var plCulture = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
 
         try
         {
-            // Pętla testująca po kolei każdą liczbę wątków od 1 do 64
-            for (int threads = 1; threads <= maxThreads; threads++)
+            // Zewnętrzna pętla przechodząca kolejno przez maski: 3x3, 5x5 oraz 7x7
+            foreach (int maskSize in masksToTest)
             {
-                // Mierzymy średni czas z 10 przebiegów dla C++ oraz dla Asemblera
-                double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, iterations, maskSize);
-                double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, iterations, maskSize);
+                var csvBuilder = new System.Text.StringBuilder();
+                csvBuilder.AppendLine("Liczba watkow;Sredni czas C++ [ms];Sredni czas ASM [ms];Przyspieszenie (C++/ASM)");
 
-                // Obliczamy ilukrotnie Asembler był szybszy od C++ (np. 3,5x)
-                double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
+                for (int threads = 1; threads <= maxThreads; threads++)
+                {
+                    // Wyświetlamy bieżący postęp na pigułce statusu w prawym górnym rogu okna
+                    _statusPill.Text = $"Test {maskSize}x{maskSize} ({threads}/{maxThreads})...";
 
-                // Dopisujemy sformatowany wiersz wyników (oddzielony średnikami) do bufora CSV
-                csvBuilder.AppendLine(string.Format(plCulture, "{0};{1:F4};{2:F4};{3:F2}", threads, cppAvg, asmAvg, speedup));
+                    double cppAvg = await MeasureBackendAsync(_highLevelBackend, inData, outData, threads, iterations, maskSize);
+                    double asmAvg = await MeasureBackendAsync(_assemblyBackend, inData, outData, threads, iterations, maskSize);
+
+                    double speedup = asmAvg > 0 ? cppAvg / asmAvg : 0;
+
+                    csvBuilder.AppendLine(string.Format(plCulture, "{0};{1:F4};{2:F4};{3:F2}", threads, cppAvg, asmAvg, speedup));
+                }
+
+                // Zapis pojedynczego pliku CSV dla aktualnie przetestowanej maski
+                string csvPath = Path.Combine(targetDirectory, $"benchmark_maska_{maskSize}x{maskSize}_{buildConfig}.csv");
+                File.WriteAllText(csvPath, csvBuilder.ToString(), System.Text.Encoding.UTF8);
             }
 
-            // Zapisujemy cały wygenerowany tekst z bufora do pliku .csv na dysku w kodowaniu UTF-8
-            File.WriteAllText(dialog.FileName, csvBuilder.ToString(), System.Text.Encoding.UTF8);
-            MessageBox.Show(this, $"Zakończono pełny test (1–{maxThreads} wątków, maska {maskSize}x{maskSize})!\nWyniki zapisano w:\n{dialog.FileName}", "Benchmark gotowy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(
+                this,
+                $"Zakończono pełny benchmark ({buildConfig}) dla masek 3x3, 5x5 oraz 7x7!\n\nUtworzono 3 pliki CSV w folderze:\n{targetDirectory}",
+                "Benchmark gotowy",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            // Czym jest ex.InnerException?.Message ?? ex.Message?
-            // Gdy błąd wystąpi wewnątrz wątku Task.Run, .NET pakuje go w ogólny wyjątek AggregateException,
-            // a prawdziwą przyczynę błędu chowa głębiej w polu InnerException. Ten zapis wyciąga właściwą treść błędu.
             MessageBox.Show(this, $"Błąd podczas benchmarku:\n\n{ex.InnerException?.Message ?? ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            // Zawsze na końcu benchmarku odpinamy pamięć RAM obu bitmap i odblokowujemy przyciski
             normalizedInput.UnlockBits(inData);
             outputBitmap.UnlockBits(outData);
 
+            // Przywrócenie domyślnego napisu na pigułce statusu oraz odblokowanie przycisków
+            _statusPill.Text = "Obie DLL wczytane";
             _runButton.Enabled = true;
             _loadImageButton.Enabled = true;
             _benchmarkButton.Enabled = true;
         }
     }
 
-    // Metoda pomocnicza dla benchmarku: mierzy średni czas wykonania (w ms) pojedynczej biblioteki (C++ lub ASM)
-    // dla zadanej liczby wątków (threads) na przestrzeni 'iterations' powtórzeń (np. 10 razy).
+    /// <summary>
+    /// Mierzy średni czas wykonania (w milisekundach) pojedynczej biblioteki natywnej dla zadanej liczby wątków.
+    /// </summary>
     private async Task<double> MeasureBackendAsync(
         NativeBackend backend,
         System.Drawing.Imaging.BitmapData inData,
@@ -963,15 +1025,18 @@ internal sealed class MainForm : Form
         return avgMs;
     }
 
-    // Nadpisuje (override) wbudowaną metodę klasy Form, wywoływaną automatycznie przez Windows w momencie zamknięcia okna
-    //
-    // Czemu protected?
-    // Ponieważ twórcy Windowsa w klasie bazowej Form zadeklarowali metodę OnFormClosed jako protected virtual.
-    // W C# nadpisując metodę (override), musimy zachować dokładnie taki sam modyfikator dostępu, jaki nadał jej autor klasy bazowej
-    //
-    // Co jakbyśmy wykorzystali oryginalną metodę i nic w niej nie nadpisywali?
-    // Oryginalna metoda z klasy Form zamknęłaby okienko i posprzątała przyciski, ale nie ma pojęcia o istnieniu naszych własnych pól _inputBitmap, _highLevelBackend i _assemblyBackend,
-    // które zostałyby w pamięci aż do ubicia procesu przez system
+    /// <summary>
+    /// Nadpisuje (override) wbudowaną metodę klasy Form, wywoływaną automatycznie przez Windows w momencie zamknięcia okna
+    /// </summary>
+    /// <remarks>
+    /// Czemu protected?
+    /// Ponieważ twórcy Windowsa w klasie bazowej Form zadeklarowali metodę OnFormClosed jako protected virtual.
+    /// W C# nadpisując metodę (override), musimy zachować dokładnie taki sam modyfikator dostępu, jaki nadał jej autor klasy bazowej
+    /// 
+    /// Co jakbyśmy wykorzystali oryginalną metodę i nic w niej nie nadpisywali?
+    /// Oryginalna metoda z klasy Form zamknęłaby okienko i posprzątała przyciski, ale nie ma pojęcia o istnieniu naszych własnych pól _inputBitmap, _highLevelBackend i _assemblyBackend,
+    /// które zostałyby w pamięci aż do ubicia procesu przez system
+    /// </remarks>
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         // Jeśli dane obiekty istnieją w pamięci (znak ? przed kropką oznacza is not null), zwalnia z pamięci RAM wczytaną bitmapę, bitmapę wynikową oraz odładowuje obie bilioteki DLL

@@ -16,13 +16,15 @@ internal static class Program
     /// <remarks>
     /// Atrybut [STAThread] (Single-Threaded Apartment) jest wymagany przez systemowe komponenty COM
     /// wykorzystywane w okienkach dialogowych (OpenFileDialog / SaveFileDialog) oraz schowku.
-    /// Dotyczy on wyłącznie głównego wątku GUI i nie ogranicza wielowątkowości obliczeniowej w tle.
-    /// No a co faktycznie robi?
+    /// Pod maską sprawia on, że przed startem Main() środowisko .NET wywołuje funkcję systemową WinAPI
+    /// CoInitializeEx(..., COINIT_APARTMENTTHREADED), rejestrując główny wątek GUI w modelu jednowątkowym COM.
+    /// Dotyczy to wyłącznie wątku rysującego okno i nie ogranicza naszych wątków roboczych w tle.
     /// </remarks>
     [STAThread]
     private static void Main()
     {
-        // Tak ogólnie, to są to jakieś metody od obiektów z biblioteki WinForms?
+        // Poniższe instrukcje to wywołania metod statycznych należących do wbudowanych klas
+        // ApplicationConfiguration oraz Application z biblioteki System.Windows.Forms (WinForms).
 
         // Włącza nowoczesne style wizualne kontrolek oraz automatyczne skalowanie ostrości (High DPI).
         ApplicationConfiguration.Initialize();

@@ -1,5 +1,5 @@
 ; =================================================================================================
-; ARCHITEKTURA REJESTRÓW x64 (SYSTEM "MATRIOSZKI" - PODZIA£ BITOWY)
+; ARCHITEKTURA REJESTRÓW x64
 ; =================================================================================================
 ; Ka¿dy z 16 rejestrów ogólnych ma 64 bity (8 bajtów). Mniejsze podrejestry to dolne czêœci
 ; tego samego fizycznego rejestru:
@@ -49,9 +49,6 @@
 ; XMM3          | 128b (dolne 64b)   | Wartoœæ shift (4, 8 lub 12)                 | Ulotny
 ; Wolne rejestry XMM: XMM4..XMM5 (ulotne) oraz XMM6..XMM15 (nieulotne - wymaga³yby zapisu na stos).
 ; =================================================================================================
-; 
-; T¹ grafikê zrobi³o AI, ale okaza³a siê byæ mega przydatna, wiêc j¹ zostawiam
-
 
 .const
 
@@ -101,11 +98,15 @@ JA_GetBackendName ENDP
 ; Funkcja: JA_ProcessImage
 ; Jak argumenty trafiaj¹ do rejestrów i na stos (Microsoft x64 Calling Convention)?
 ;   Kod wywo³uj¹cy (C# przez P/Invoke) TU¯ PRZED wykonaniem instrukcji 'call JA_ProcessImage':
+
 ;   1. Wpisuje pierwsze 4 argumenty bezpoœrednio do rejestrów:
 ;      RCX = in, RDX = out, R8D = width, R9D = stride.
+;
 ;   2. Argumenty 5, 6 i 7 zapisuje w pamiêci RAM na stosie (w odstêpach co 8 bajtów).
+;
 ;   3. Rezerwuje na stosie 32 bajty tzw. Shadow Space, a instrukcja 'call' dok³ada na szczyt
 ;      stosu 8-bajtowy Adres Powrotu. Dlatego odczytuj¹c stos wewn¹trz naszej funkcji:
+;
 ;      - [RSP + 0..7]   -> Adres powrotu (8 bajtów)
 ;      - [RSP + 8..39]  -> Shadow Space (32 bajty)
 ;      - [RSP + 40]     -> 5. argument: startY (odczytujemy jako 4-bajtowy int: dword ptr)
@@ -164,6 +165,7 @@ JA_ProcessImage PROC
 ValidMask:
 
     ; --- 3. PROLOG: ZAPIS REJESTRÓW NIEULOTNYCH NA STOS ---
+    ;
     ; Dlaczego robimy PUSH na stos?
     ; Rejestry RBX, RSI, RDI oraz R12..R15 nale¿¹ do kodu wywo³uj¹cego (C#), który trzyma w nich
     ; swoje w³asne dane. Zgodnie z kontraktem ABI musimy zrobiæ ich kopiê zapasow¹ w pamiêci RAM
@@ -232,10 +234,10 @@ LoopY_Start:
         neg  r15                        ; Odwrócenie znaku: R15 = -radius
 
         LoopKY_Start:
-            cmp  r15, r12               ; Czy ky > radius? (U¿ywamy JG, bo radius jest w³¹cznie!)
+            cmp  r15, r12               ; Czy ky > radius? (U¿ywamy JG, bo radius jest w³¹cznie)
             jg   LoopKY_End
 
-            ; Wyci¹gamy mno¿enie (y + ky) * stride przed pêtlê KX (optymalizacja Hoisting)
+            ; Wyci¹gamy mno¿enie (y + ky) * stride przed pêtlê KX
             mov  rdi, r13               ; RDI = y
             add  rdi, r15               ; RDI = y + ky
             imul rdi, r9                ; RDI = (y + ky) * stride (gotowy offset wiersza s¹siada)
@@ -307,7 +309,7 @@ LoopY_Start:
 
         ; 4. Zapis dok³adnie 3 bajtów (Blue, Green, Red) do tablicy out ([RDX + RAX]):
         ;    Nie mo¿emy zapisaæ ca³ego 4-bajtowego dworda z XMM0 naraz, bo 4. bajt ("Œmieæ")
-        ;    nadpisa³by kana³ Blue s¹siedniego piksela po prawej stronie!
+        ;    nadpisa³by kana³ Blue s¹siedniego piksela po prawej stronie
         movd r15d, xmm0                         ; Przenosimy 4 bajty [B, G, R, Œmieæ] do 32-bitowego R15D
         mov  word ptr [rdx + rax], r15w         ; Zapisujemy 2 najni¿sze bajty (B i G) z 16-bitowego R15W
         shr  r15d, 16                           ; Przesuwamy R15D o 16 bitów (2 bajty) w prawo -> R trafia do R15B
